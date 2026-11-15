@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fintech-compliance-mcp"
+version = "1.0.0"
+description = "Zero-trust fintech compliance MCP server with hash-chained audit ledger"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0",
+    "pydantic>=2.0",
+    "streamlit>=1.35",
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
