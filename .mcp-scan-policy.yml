@@ -1,0 +1,7 @@
+version: 1
+rules:
+  - id: block-external-secrets
+    description: Block any server that leaks secrets to unknown endpoints
+    action: block
+    match:
+      finding_id: ["exposed-secret", "exfiltration-vector"]

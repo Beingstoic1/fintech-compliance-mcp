@@ -1,0 +1,6 @@
+_reference_repos/
+.venv/
+__pycache__/
+*.pyc
+data/*.db
+.DS_Store
