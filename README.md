@@ -2,7 +2,7 @@
 
 > **Zero-trust AI compliance infrastructure for autonomous financial agents**: Deterministic RBAC gating, dual-boundary PII masking, universal prompt-injection neutralization, argument-bound Four-Eyes approvals, and a tamper-evident SHA-256 hash-chained audit ledger.
 
-[![pytest](https://img.shields.io/badge/tests-24%20passing-brightgreen)]()
+[![pytest](https://img.shields.io/badge/tests-30%20passing-brightgreen)]()
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)]()
 [![MCP](https://img.shields.io/badge/protocol-FastMCP-green.svg)]()
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)]()
@@ -12,8 +12,7 @@
 ### 🌐 Live Demos & Interactive Resources
 - **[Interactive Product Showcase & Browser Sandbox (docs/index.html)](https://your-org.github.io/fintech-compliance-mcp/)**: Zero-backend click-through pipeline, interactive PII toggle, injection filter demo, and client-side SHA-256 tamper lab.
 - **[Live Streamlit Compliance Workbench](https://fintech-compliance-mcp.streamlit.app)**: Enterprise risk console with live guardrail simulator, Four-Eyes approval queue, and cryptographic tamper testing.
-- **[Compact Security Audit Brief (docs/AUDIT_BRIEF.md)](docs/AUDIT_BRIEF.md)**: Token-optimized security bundle prepared for cross-model AI audits (Claude Sonnet / GPT-4o).
-- **[Red-Team Security Audit Report](docs/AUDIT_BRIEF.md)**: Production sign-off audit verifying TOCTOU atomic approval locking, audit row-deletion detection, and Unicode homoglyph/ZWSP prompt injection sanitization.
+- **[Red-Team Security Audit Report (SECURITY_AUDIT_REPORT.md)](SECURITY_AUDIT_REPORT.md)**: Production sign-off audit verifying TOCTOU atomic approval locking, audit row-deletion detection, Unicode homoglyph/ZWSP prompt injection sanitization, and tenant isolation.
 
 ---
 
@@ -209,7 +208,7 @@ Indirect injection attacks hidden inside merchant transaction memos (e.g. `IGNOR
 
 ---
 
-## 🧪 Automated Test Suite (24 Tests)
+## 🧪 Automated Test Suite (30 Tests)
 
 | # | Test Name | Invariant Verified |
 |---|-----------|-------------------|
@@ -237,6 +236,12 @@ Indirect injection attacks hidden inside merchant transaction memos (e.g. `IGNOR
 | 22 | `test_invalid_session_token_rejected` | Forged session tokens raise `INVALID_SESSION_TOKEN` |
 | 23 | `test_approval_hash_binding_includes_requester` | Requester identity cryptographically bound into approval hash |
 | 24 | `test_workbench_app_cold_start` | Streamlit compliance workbench cold-starts with 0 exceptions |
+| 25 | `test_cross_tenant_structuring_anomalies_blocked` | Cross-tenant structuring anomaly query blocked by tenant isolation |
+| 26 | `test_session_create_role_validation` | Session creation rejects unauthorized roles outside RBAC matrix |
+| 27 | `test_pii_numeric_amount_cents_not_masked` | Numeric integer fields (e.g. 50000000) not falsely masked as account numbers |
+| 28 | `test_workbench_interactive_tab1_junior_and_senior` | AppTest verifies Tab 1 interactive tool execution and role-dependent masking |
+| 29 | `test_workbench_interactive_tab2_four_eyes_workflow` | AppTest verifies Tab 2 Four-Eyes approval, execution, and state transition |
+| 30 | `test_workbench_interactive_tab3_tamper_and_restore` | AppTest verifies Tab 3 cryptographic chain verification, tampering, and recovery |
 
 ---
 

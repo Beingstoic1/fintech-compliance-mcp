@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from dataclasses import dataclass
 
@@ -21,10 +22,13 @@ class SessionRegistry:
             cls._sessions = {}
 
     @classmethod
-    def create(cls, sub: str, actor_role: str, tenant_id: str) -> str:
-        """Generate token = 'tok_' + secrets.token_hex(16), store Session, return token."""
+    def create(cls, sub: str, actor_role: str, tenant_id: str, token: str | None = None) -> str:
+        """Generate token = 'tok_' + secrets.token_hex(16) (or use specified token), store Session, return token."""
+        if actor_role not in ROLES:
+            raise ValueError(f"Invalid actor_role: '{actor_role}'. Must be one of {ROLES}")
         cls._init()
-        token = "tok_" + secrets.token_hex(16)
+        if token is None:
+            token = "tok_" + secrets.token_hex(16)
         cls._sessions[token] = Session(
             session_token=token, sub=sub, actor_role=actor_role, tenant_id=tenant_id
         )
@@ -60,7 +64,10 @@ def _seed_demo_sessions():
         ("officer_frank", "compliance_officer",   "tenant_b2b_cards"),
     ]
     for sub, role, tenant in demos:
-        token = SessionRegistry.create(sub, role, tenant)
+        # Deterministic token derived from sub so external MCP clients can reliably authenticate
+        token_hash = hashlib.sha256(f"demo_session:{sub}".encode("utf-8")).hexdigest()[:16]
+        token = f"tok_demo_{sub}_{token_hash}"
+        token = SessionRegistry.create(sub, role, tenant, token=token)
         DEMO_TOKENS[sub] = token
 
 

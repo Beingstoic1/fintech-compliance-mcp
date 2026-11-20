@@ -622,3 +622,178 @@ def test_workbench_app_cold_start():
     at = AppTest.from_file(str(app_path), default_timeout=30)
     at.run()
     assert not at.exception, f"Workbench app threw unexpected exception: {at.exception}"
+
+
+# ─── Test 25: [F10 MEDIUM] Cross-tenant structuring query blocked ─────────────
+
+def test_cross_tenant_structuring_anomalies_blocked(junior_token):
+    """
+    detect_structuring_anomalies must enforce that caller tenant matches target tenant.
+    junior_alice (tenant_neobank_in) querying tenant_b2b_cards must be blocked.
+    """
+    from src.mcp_server.server import detect_structuring_anomalies
+    result = detect_structuring_anomalies(junior_token, "tenant_b2b_cards")
+    assert result["decision"] == "BLOCK", f"Cross-tenant structuring query must be blocked: {result}"
+    assert "TENANT_ISOLATION" in result.get("error", "")
+
+
+# ─── Test 26: [F8 MEDIUM] Session creation role validation ───────────────────
+
+def test_session_create_role_validation():
+    """SessionRegistry.create must reject roles not in ROLES with ValueError."""
+    from src.security.session import SessionRegistry
+    with pytest.raises(ValueError) as exc_info:
+        SessionRegistry.create("rogue_user", "superadmin", "tenant_neobank_in")
+    assert "Invalid actor_role" in str(exc_info.value)
+
+
+# ─── Test 27: [F6 HIGH] Non-PII numeric fields not falsely masked ─────────────
+
+def test_pii_numeric_amount_cents_not_masked(junior_token):
+    """
+    Numeric fields like amount_cents (e.g. 50000000 = 8 digits) must not be
+    falsely masked as account numbers for junior_analyst.
+    """
+    from src.security.session import SessionRegistry
+    from src.security.guardrails import post_process, compute_args_sha256
+    session = SessionRegistry.resolve(junior_token)
+    raw = {
+        "txn_id": "TXN-001",
+        "account_id": "ACC-001",
+        "account_number": "123456784821",
+        "amount_cents": 50000000,
+        "currency": "INR",
+        "memo": "Standard transaction"
+    }
+    result = post_process(
+        raw, session, "query_transactions",
+        compute_args_sha256("query_transactions", {"account_id": "ACC-001"}, session.sub)
+    )
+    # amount_cents must remain integer 50000000
+    assert result["data"]["amount_cents"] == 50000000, "Integer amount_cents must not be altered"
+    # account_number string must be masked
+    assert result["data"]["account_number"] == "****4821", "Account number must be masked"
+
+
+# ─── Test 28: Interactive Streamlit Tab 1 — Junior and Senior Tool Run ────────
+
+def test_workbench_interactive_tab1_junior_and_senior():
+    """
+    AppTest simulation of Tab 1:
+    1. junior_alice runs get_account_profile -> verifies masked account_number & tax_id.
+    2. senior_carol runs get_account_profile -> verifies unmasked account_number & tax_id.
+    """
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+
+    app_path = Path(__file__).resolve().parent.parent / "src" / "workbench" / "app.py"
+    at = AppTest.from_file(str(app_path), default_timeout=30)
+    at.run()
+    assert not at.exception
+
+    # 1. Run as default junior_alice for ACC-001
+    btn_run = [b for b in at.button if "Run Tool" in b.label][0]
+    btn_run.click().run()
+    assert not at.exception
+    assert len(at.json) >= 2
+    guard_output = json.loads(at.json[1].value)
+    assert guard_output["account_number"] == "****4821"
+    assert guard_output["tax_id"] == "XX-XXX4567"
+
+    # 2. Switch identity to senior_carol
+    at.sidebar.selectbox[0].select("senior_carol").run()
+    assert not at.exception
+    btn_run = [b for b in at.button if "Run Tool" in b.label][0]
+    btn_run.click().run()
+    assert not at.exception
+    guard_output_senior = json.loads(at.json[1].value)
+    assert guard_output_senior["account_number"] == "123456784821"
+    assert guard_output_senior["tax_id"] == "AB-1234567"
+
+
+# ─── Test 29: Interactive Streamlit Tab 2 — Four-Eyes Workflow ────────────────
+
+def test_workbench_interactive_tab2_four_eyes_workflow():
+    """
+    AppTest simulation of Tab 2:
+    1. senior_carol creates account freeze request for ACC-010 in Tab 1.
+    2. Queue displays pending request.
+    3. officer_eve approves request ('Approve Only').
+    4. officer_eve executes request ('Execute Action') -> ACC-010 frozen.
+    """
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    from src.db.database import get_account, get_pending_approvals
+
+    app_path = Path(__file__).resolve().parent.parent / "src" / "workbench" / "app.py"
+    at = AppTest.from_file(str(app_path), default_timeout=30)
+    at.run()
+
+    # Step 1: senior_carol requests freeze for ACC-010
+    at.sidebar.selectbox[0].select("senior_carol").run()
+    at.selectbox[0].select("request_account_freeze").run()
+    btn_run = [b for b in at.button if "Run Tool" in b.label][0]
+    btn_run.click().run()
+    assert not at.exception
+
+    pending = get_pending_approvals()
+    assert len(pending) >= 1
+    appr_id = pending[0]["approval_id"]
+
+    # Step 2: officer_eve clicks 'Approve Only'
+    btn_appr = [b for b in at.button if b.key == f"appr_{appr_id}"]
+    assert len(btn_appr) == 1
+    btn_appr[0].click().run()
+    assert not at.exception
+
+    # Step 3: officer_eve clicks 'Execute Action'
+    btn_exec = [b for b in at.button if b.key == f"exec_{appr_id}"]
+    assert len(btn_exec) == 1
+    btn_exec[0].click().run()
+    assert not at.exception
+
+    # Verify database state
+    acc = get_account("ACC-010")
+    assert acc is not None and acc["is_frozen"] == 1
+
+
+# ─── Test 30: Interactive Streamlit Tab 3 — Tamper Lab & Restore ──────────────
+
+def test_workbench_interactive_tab3_tamper_and_restore():
+    """
+    AppTest simulation of Tab 3:
+    1. Populate audit event.
+    2. Click 'Verify Full Chain Integrity' -> verifies clean genesis-to-tip chain.
+    3. Click 'Simulate Database Tampering' -> verifies verifier catches corrupted row.
+    4. Click 'Restore Chain to Valid State' -> verifies chain integrity restored.
+    """
+    from pathlib import Path
+    from streamlit.testing.v1 import AppTest
+    from src.db.audit import verify_audit_chain
+
+    app_path = Path(__file__).resolve().parent.parent / "src" / "workbench" / "app.py"
+    at = AppTest.from_file(str(app_path), default_timeout=30)
+    at.run()
+
+    # 1. Generate an event via Tab 1
+    btn_run = [b for b in at.button if "Run Tool" in b.label][0]
+    btn_run.click().run()
+
+    # 2. Verify chain integrity
+    btn_verify = [b for b in at.button if "Verify Full Chain" in b.label][0]
+    btn_verify.click().run()
+    assert not at.exception
+    assert any("CHAIN INTACT" in s.value for s in at.success)
+
+    # 3. Simulate database tampering
+    btn_tamper = [b for b in at.button if "Simulate Database Tampering" in b.label][0]
+    btn_tamper.click().run()
+    assert not at.exception
+    assert any("VERIFIER CAUGHT TAMPERING" in e.value for e in at.error)
+    assert verify_audit_chain()["ok"] is False
+
+    # 4. Restore chain
+    btn_restore = [b for b in at.button if "Restore Chain" in b.label][0]
+    btn_restore.click().run()
+    assert not at.exception
+    assert verify_audit_chain()["ok"] is True

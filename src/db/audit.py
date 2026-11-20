@@ -203,6 +203,37 @@ def tamper_row(event_id: int, new_decision: str) -> None:
         )
 
 
+def restore_row(event_id: int) -> bool:
+    """
+    Restore a tampered row's decision by mathematically finding the decision
+    that matches its stored entry_hash, returning True if successfully restored.
+    """
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM audit_logs WHERE event_id=?", (event_id,)).fetchone()
+        if not row:
+            return False
+        row_dict = dict(row)
+        for dec in ("ALLOW", "REDACT", "BLOCK", "ESCALATE", "EXECUTED"):
+            h = _compute_entry_hash(
+                row_dict["prev_hash"],
+                row_dict["timestamp_utc"],
+                row_dict["session_sub"],
+                row_dict["actor_role"],
+                row_dict["tenant_id"],
+                row_dict["tool_name"],
+                row_dict["args_sha256"],
+                dec,
+                row_dict["detail"],
+            )
+            if h == row_dict["entry_hash"]:
+                conn.execute(
+                    "UPDATE audit_logs SET decision=? WHERE event_id=?",
+                    (dec, event_id),
+                )
+                return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Module init
 # ---------------------------------------------------------------------------

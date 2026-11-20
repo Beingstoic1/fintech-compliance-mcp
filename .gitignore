@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 data/*.db
 .DS_Store
+*/.DS_Store
+.pytest_cache/
+.agents/skills/
+

@@ -420,9 +420,13 @@ def get_transactions(
     start_date: str | None = None,
     end_date: str | None = None,
     limit: int = 50,
+    tenant_id: str | None = None,
 ) -> list[dict]:
     sql = "SELECT * FROM transactions WHERE account_id=?"
     params: list = [account_id]
+    if tenant_id:
+        sql += " AND tenant_id = ?"
+        params.append(tenant_id)
     if start_date:
         sql += " AND created_at >= ?"
         params.append(start_date)
@@ -436,10 +440,12 @@ def get_transactions(
     return [dict(r) for r in rows]
 
 
-def get_pending_approvals() -> list[dict]:
+def get_pending_approvals(statuses: tuple[str, ...] = ("PENDING", "APPROVED")) -> list[dict]:
     with get_connection() as conn:
+        placeholders = ",".join("?" for _ in statuses)
         rows = conn.execute(
-            "SELECT * FROM pending_approvals WHERE status='PENDING' ORDER BY created_at DESC"
+            f"SELECT * FROM pending_approvals WHERE status IN ({placeholders}) ORDER BY created_at DESC",
+            statuses,
         ).fetchall()
     return [dict(r) for r in rows]
 
@@ -496,9 +502,9 @@ def atomic_consume_approval(
     approver_sub: str,
     consumed_at: str,
 ) -> bool:
-    """Atomically transition approval from PENDING → CONSUMED.
+    """Atomically transition approval from PENDING or APPROVED → CONSUMED.
 
-    Uses BEGIN IMMEDIATE + WHERE status='PENDING' to prevent TOCTOU races.
+    Uses BEGIN IMMEDIATE + WHERE status IN ('PENDING', 'APPROVED') to prevent TOCTOU races.
     Returns True if exactly one row was consumed, False otherwise (already consumed / expired).
     """
     conn = get_connection()
@@ -507,7 +513,7 @@ def atomic_consume_approval(
         cursor = conn.execute(
             """UPDATE pending_approvals
                SET status='CONSUMED', approver_sub=?, consumed_at=?
-               WHERE approval_id=? AND status='PENDING'""",
+               WHERE approval_id=? AND status IN ('PENDING', 'APPROVED')""",
             (approver_sub, consumed_at, approval_id),
         )
         consumed = cursor.rowcount == 1

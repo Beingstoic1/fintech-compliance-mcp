@@ -69,7 +69,13 @@ def query_transactions(session_token: str, account_id: str,
         return {"error": str(e), "decision": "BLOCK"}
 
     args_sha256 = compute_args_sha256(tool_name, args, session.sub)
-    txns = get_transactions(account_id, start_date or None, end_date or None, min(limit, 100))
+    account = get_account(account_id, session.tenant_id)
+    if not account:
+        log_event(session.sub, session.actor_role, session.tenant_id,
+                  tool_name, args_sha256, "BLOCK", "Account not found in your tenant scope")
+        return {"error": "Account not found in your tenant scope", "decision": "BLOCK"}
+
+    txns = get_transactions(account_id, start_date or None, end_date or None, min(limit, 100), tenant_id=session.tenant_id)
     result = post_process(txns, session, tool_name, args_sha256)
     log_event(session.sub, session.actor_role, session.tenant_id,
               tool_name, args_sha256, result["decision"])
@@ -90,6 +96,13 @@ def detect_structuring_anomalies(session_token: str, tenant_id: str,
         return {"error": str(e), "decision": "BLOCK"}
 
     args_sha256 = compute_args_sha256(tool_name, args, session.sub)
+    if tenant_id != session.tenant_id:
+        log_event(session.sub, session.actor_role, session.tenant_id,
+                  tool_name, args_sha256, "BLOCK",
+                  f"TENANT_ISOLATION_VIOLATION: caller tenant {session.tenant_id} cannot query {tenant_id}")
+        return {"error": "TENANT_ISOLATION_VIOLATION: caller tenant does not match target tenant",
+                "decision": "BLOCK"}
+
     anomalies = detect_structuring(tenant_id, threshold_cents)
     result = post_process(anomalies, session, tool_name, args_sha256)
     log_event(session.sub, session.actor_role, session.tenant_id,
@@ -113,6 +126,12 @@ def request_account_freeze(session_token: str, account_id: str, reason: str) -> 
         return {"error": str(e), "decision": "BLOCK"}
 
     args_sha256 = compute_args_sha256(tool_name, args, session.sub)
+    account = get_account(account_id, session.tenant_id)
+    if not account:
+        log_event(session.sub, session.actor_role, session.tenant_id,
+                  tool_name, args_sha256, "BLOCK", "Account not found in your tenant scope")
+        return {"error": "Account not found in your tenant scope", "decision": "BLOCK"}
+
     can_args = canonical_json(args)
     approval_id = str(uuid.uuid4())
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
@@ -192,10 +211,10 @@ def execute_approved_action(session_token: str, approval_id: str) -> dict:
         return {"error": "Approval not found", "decision": "BLOCK"}
 
     # Check status
-    if approval["status"] != "PENDING":
+    if approval["status"] not in ("PENDING", "APPROVED"):
         log_event(session.sub, session.actor_role, session.tenant_id,
                   tool_name, args_sha256, "BLOCK",
-                  f"Approval status is {approval['status']}, not PENDING")
+                  f"Approval status is {approval['status']}, not PENDING/APPROVED")
         return {"error": f"ALREADY_{approval['status']}: approval cannot be executed",
                 "decision": "BLOCK"}
 

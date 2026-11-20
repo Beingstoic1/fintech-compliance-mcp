@@ -106,7 +106,7 @@ try:
         get_pending_approvals, get_approval, update_approval_status,
         atomic_consume_approval, freeze_account, refund_transaction, create_approval
     )
-    from src.db.audit import get_audit_log, verify_audit_chain, tamper_row, init_audit_table
+    from src.db.audit import get_audit_log, verify_audit_chain, tamper_row, restore_row, init_audit_table
     from src.security.session import DEMO_TOKENS, SessionRegistry
     from src.security.guardrails import (
         pre_check, post_process, compute_args_sha256, canonical_json
@@ -287,7 +287,7 @@ with tab1:
                 approval = get_approval(appr_id)
                 if not approval:
                     error = "Approval not found"
-                elif approval["status"] != "PENDING":
+                elif approval["status"] not in ("PENDING", "APPROVED"):
                     error = f"ALREADY_{approval['status']}: approval cannot be executed"
                 elif datetime.now(timezone.utc).isoformat() > approval["expires_at"]:
                     error = "EXPIRED: approval has passed its 15-minute TTL"
@@ -386,6 +386,8 @@ with tab2:
 
                     if datetime.now(timezone.utc).isoformat() > appr["expires_at"]:
                         st.markdown('<span class="badge-block">⌛ STATUS: EXPIRED</span>', unsafe_allow_html=True)
+                    elif appr.get("status") == "APPROVED":
+                        st.markdown('<span class="badge-allow">● STATUS: APPROVED (AWAITING EXECUTION)</span>', unsafe_allow_html=True)
                     else:
                         st.markdown('<span class="badge-escalate">● STATUS: AWAITING APPROVAL</span>', unsafe_allow_html=True)
 
@@ -404,16 +406,30 @@ with tab2:
                 elif appr.get("tenant_id") and appr["tenant_id"] != co_session.tenant_id:
                     st.error(f"🔒 **TENANT_ISOLATION_VIOLATION**: Request belongs to `{appr['tenant_id']}`. Acting officer is in `{co_session.tenant_id}`.")
                 else:
-                    b1, b2 = st.columns(2)
-                    if b1.button("✅ Approve Request", key=f"appr_{appr_id}"):
-                        update_approval_status(appr_id, "APPROVED", approver_sub=co_session.sub)
-                        from src.db.audit import log_event
-                        log_event(co_session.sub, co_session.actor_role, co_session.tenant_id,
-                                  "approve_action", compute_args_sha256("approve_action", {"approval_id": appr_id}, co_session.sub),
-                                  "ALLOW", f"Approved by {co_session.sub}")
-                        st.success("✅ Request Approved! It can now be consumed via `execute_approved_action`.")
+                    b1, b2, b3 = st.columns(3)
+                    if appr.get("status") != "APPROVED":
+                        if b1.button("✅ Approve Only", key=f"appr_{appr_id}"):
+                            update_approval_status(appr_id, "APPROVED", approver_sub=co_session.sub)
+                            from src.db.audit import log_event
+                            log_event(co_session.sub, co_session.actor_role, co_session.tenant_id,
+                                      "approve_action", compute_args_sha256("approve_action", {"approval_id": appr_id}, co_session.sub),
+                                      "ALLOW", f"Approved by {co_session.sub}")
+                            st.success("✅ Request Approved! Ready for execution.")
+                            st.rerun()
+                    else:
+                        b1.info("Already Approved")
+
+                    btn_label = "⚡ Approve & Execute" if appr.get("status") != "APPROVED" else "▶️ Execute Action"
+                    if b2.button(btn_label, key=f"exec_{appr_id}", type="primary"):
+                        from src.mcp_server.server import execute_approved_action
+                        exec_res = execute_approved_action(co_token, appr_id)
+                        if exec_res.get("decision") == "EXECUTED":
+                            st.success(f"⚡ Successfully executed: {exec_res.get('action')}")
+                        else:
+                            st.error(f"Execution error: {exec_res.get('error')}")
                         st.rerun()
-                    if b2.button("❌ Reject Request", key=f"rej_{appr_id}"):
+
+                    if b3.button("❌ Reject", key=f"rej_{appr_id}"):
                         update_approval_status(appr_id, "REJECTED", approver_sub=co_session.sub)
                         from src.db.audit import log_event
                         log_event(co_session.sub, co_session.actor_role, co_session.tenant_id,
@@ -441,7 +457,7 @@ with tab3:
                         "tenant_id", "tool_name", "decision",
                         "prev_hash_short", "entry_hash_short"]
         avail = [c for c in display_cols if c in df.columns]
-        st.dataframe(df[avail], use_container_width=True, height=280)
+        st.dataframe(df[avail], width="stretch", height=280)
         st.metric("Total Cryptographic Log Rows", len(logs))
     else:
         st.info("No audit logs yet. Run tools in Tab 1 to populate the ledger.")
@@ -485,8 +501,7 @@ with tab3:
         if st.button("🔄 Restore Chain to Valid State"):
             if logs:
                 target_id = logs[0]["event_id"]
-                orig_dec = logs[0]["decision"]
-                tamper_row(target_id, orig_dec)
+                restore_row(target_id)
                 check = verify_audit_chain()
                 if check["ok"]:
                     st.success("✅ Chain restored and verified!")
@@ -496,4 +511,4 @@ with tab3:
 
     with st.expander("🔎 View Full Cryptographic Payload"):
         if logs:
-            st.dataframe(pd.DataFrame(logs), use_container_width=True)
+            st.dataframe(pd.DataFrame(logs), width="stretch")
