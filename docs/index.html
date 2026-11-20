@@ -988,19 +988,19 @@
         <p class="cta-desc">
           I design and implement deterministic compliance guardrails, Model Context Protocol servers,
           and tamper-evident cryptographic ledgers for fintechs, neobanks, and AI risk teams.
-          Available for 2-week Compliance MCP Architecture Sprints and security audits.
+          Available for Compliance MCP Architecture Sprints and security audits.
         </p>
       </div>
       <div class="cta-actions">
-        <a id="ctaEmailBtn" href="#" class="btn btn-primary" style="width: 100%;">Get in Touch</a>
-        <a id="ctaLinkedinBtn" href="#" target="_blank" class="btn btn-secondary" style="width: 100%;">Connect on LinkedIn</a>
+        <a id="ctaGithubBtn" href="#" target="_blank" class="btn btn-primary" style="width: 100%;">View on GitHub</a>
+        <a id="ctaWorkbenchBtn" href="#" target="_blank" class="btn btn-secondary" style="width: 100%;">Launch Live Workbench</a>
       </div>
     </section>
 
     <!-- Footer -->
     <footer class="site-footer">
       <div>
-        Fintech Compliance MCP · Licensed under Apache-2.0 · Designed for Institutional Financial AI
+        Fintech Compliance MCP · Designed & Engineered by <strong id="footerAuthor" style="color: var(--text-main);">Shubham Gupta</strong> · Licensed under Apache-2.0
       </div>
       <div style="display: flex; gap: 18px;">
         <a id="footerGithub" href="#" target="_blank">GitHub</a>
@@ -1016,23 +1016,52 @@
      * TOP CONFIG BLOCK - Update your URLs here in 10 seconds!
      */
     const SITE_CONFIG = {
-      githubUrl: "https://github.com/your-org/fintech-compliance-mcp",
-      liveWorkbenchUrl: "https://fintech-compliance-mcp.streamlit.app",
-      demoVideoUrl: "https://youtu.be/demo",
-      authorName: "Fintech Security & AI Systems Engineer",
-      linkedinUrl: "https://linkedin.com",
-      email: "mailto:compliance-engineer@example.com"
+      githubUrl: "https://github.com/Beingstoic1/fintech-compliance-mcp",
+      showcaseUrl: "https://beingstoic1.github.io/fintech-compliance-mcp/",
+      liveWorkbenchUrl: "<PASTE_YOUR_STREAMLIT_APP_URL_HERE>",
+      authorName: "Shubham Gupta"
     };
 
     // Apply config URLs to DOM
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("navGithub").href = SITE_CONFIG.githubUrl;
       document.getElementById("heroGithubBtn").href = SITE_CONFIG.githubUrl;
-      document.getElementById("heroWorkbenchBtn").href = SITE_CONFIG.liveWorkbenchUrl;
       document.getElementById("footerGithub").href = SITE_CONFIG.githubUrl;
-      document.getElementById("footerWorkbench").href = SITE_CONFIG.liveWorkbenchUrl;
-      document.getElementById("ctaEmailBtn").href = SITE_CONFIG.email;
-      document.getElementById("ctaLinkedinBtn").href = SITE_CONFIG.linkedinUrl;
+
+      // Handle workbench URLs gracefully if placeholder is still present
+      const isWorkbenchPlaceholder = !SITE_CONFIG.liveWorkbenchUrl || SITE_CONFIG.liveWorkbenchUrl.includes("<PASTE_");
+      const workbenchTarget = isWorkbenchPlaceholder ? "#sandbox" : SITE_CONFIG.liveWorkbenchUrl;
+
+      const heroWb = document.getElementById("heroWorkbenchBtn");
+      heroWb.href = workbenchTarget;
+      if (isWorkbenchPlaceholder) {
+        heroWb.removeAttribute("target");
+        heroWb.title = "Local Demo Available in Interactive Sandbox Below";
+      }
+
+      const footerWb = document.getElementById("footerWorkbench");
+      footerWb.href = workbenchTarget;
+      if (isWorkbenchPlaceholder) {
+        footerWb.removeAttribute("target");
+      }
+
+      const ctaWb = document.getElementById("ctaWorkbenchBtn");
+      if (ctaWb) {
+        ctaWb.href = workbenchTarget;
+        if (isWorkbenchPlaceholder) {
+          ctaWb.removeAttribute("target");
+        }
+      }
+
+      const ctaGh = document.getElementById("ctaGithubBtn");
+      if (ctaGh) {
+        ctaGh.href = SITE_CONFIG.githubUrl;
+      }
+
+      const authorEl = document.getElementById("footerAuthor");
+      if (authorEl) {
+        authorEl.textContent = SITE_CONFIG.authorName;
+      }
 
       initPipeline();
       initTamperTable();
