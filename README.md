@@ -2,7 +2,7 @@
 
 > **Zero-trust AI compliance infrastructure for autonomous financial agents**: Deterministic RBAC gating, dual-boundary PII masking, universal prompt-injection neutralization, argument-bound Four-Eyes approvals, and a tamper-evident SHA-256 hash-chained audit ledger.
 
-[![pytest](https://img.shields.io/badge/tests-12%20passing-brightgreen)]()
+[![pytest](https://img.shields.io/badge/tests-24%20passing-brightgreen)]()
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)]()
 [![MCP](https://img.shields.io/badge/protocol-FastMCP-green.svg)]()
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)]()
@@ -13,6 +13,7 @@
 - **[Interactive Product Showcase & Browser Sandbox (docs/index.html)](https://your-org.github.io/fintech-compliance-mcp/)**: Zero-backend click-through pipeline, interactive PII toggle, injection filter demo, and client-side SHA-256 tamper lab.
 - **[Live Streamlit Compliance Workbench](https://fintech-compliance-mcp.streamlit.app)**: Enterprise risk console with live guardrail simulator, Four-Eyes approval queue, and cryptographic tamper testing.
 - **[Compact Security Audit Brief (docs/AUDIT_BRIEF.md)](docs/AUDIT_BRIEF.md)**: Token-optimized security bundle prepared for cross-model AI audits (Claude Sonnet / GPT-4o).
+- **[Red-Team Security Audit Report](docs/AUDIT_BRIEF.md)**: Production sign-off audit verifying TOCTOU atomic approval locking, audit row-deletion detection, and Unicode homoglyph/ZWSP prompt injection sanitization.
 
 ---
 
@@ -208,7 +209,7 @@ Indirect injection attacks hidden inside merchant transaction memos (e.g. `IGNOR
 
 ---
 
-## 🧪 Automated Test Suite (12 Tests)
+## 🧪 Automated Test Suite (24 Tests)
 
 | # | Test Name | Invariant Verified |
 |---|-----------|-------------------|
@@ -224,6 +225,18 @@ Indirect injection attacks hidden inside merchant transaction memos (e.g. `IGNOR
 | 10 | `test_replay_blocked_after_consume` | `CONSUMED` approval cannot be re-executed (replay blocked) |
 | 11 | `test_expired_approval_rejected` | Approvals past 15-minute TTL are rejected as expired |
 | 12 | `test_audit_chain_tamper_detection` | Tampered SQLite row is caught by SHA-256 verifier |
+| 13 | `test_audit_chain_detects_row_deletion` | Deleting a row from audit log triggers gap detection |
+| 14 | `test_audit_hash_covers_tenant_id_and_detail` | Tampering with tenant_id or detail breaks hash verification |
+| 15 | `test_atomic_consume_prevents_double_execution` | Atomic compare-and-swap prevents concurrent TOCTOU double-consumption |
+| 16 | `test_cross_tenant_approval_blocked` | Compliance officer blocked from approving cross-tenant requests |
+| 17 | `test_unicode_zwsp_injection_bypass_caught` | Zero-width space evasion in injection patterns neutralized |
+| 18 | `test_error_leakage_on_bad_refund_txn` | Failed mutations return sanitized errors without stack trace leakage |
+| 19 | `test_unicode_homoglyph_injection_bypass_caught` | Cyrillic/Greek homoglyph evasion neutralized |
+| 20 | `test_cross_tenant_account_access_blocked` | Cross-tenant data isolation strictly enforced on account queries |
+| 21 | `test_unknown_tool_name_blocked` | Unknown tools default to RBAC denial |
+| 22 | `test_invalid_session_token_rejected` | Forged session tokens raise `INVALID_SESSION_TOKEN` |
+| 23 | `test_approval_hash_binding_includes_requester` | Requester identity cryptographically bound into approval hash |
+| 24 | `test_workbench_app_cold_start` | Streamlit compliance workbench cold-starts with 0 exceptions |
 
 ---
 

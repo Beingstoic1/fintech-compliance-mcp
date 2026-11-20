@@ -104,7 +104,7 @@ try:
     from src.db.database import (
         DB_PATH, init_db, get_account, get_transactions, detect_structuring,
         get_pending_approvals, get_approval, update_approval_status,
-        freeze_account, refund_transaction, create_approval
+        atomic_consume_approval, freeze_account, refund_transaction, create_approval
     )
     from src.db.audit import get_audit_log, verify_audit_chain, tamper_row, init_audit_table
     from src.security.session import DEMO_TOKENS, SessionRegistry
@@ -258,7 +258,8 @@ with tab1:
                 exp_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
                 can_args = canonical_json(args_dict)
                 create_approval(appr_id, session.sub, session.actor_role,
-                                tool_choice, can_args, args_sha256, exp_at)
+                                tool_choice, can_args, args_sha256, exp_at,
+                                tenant_id=session.tenant_id)
                 raw_result = {"approval_id": appr_id, "expires_in_seconds": 900,
                               "status": "PENDING", "decision": "ESCALATE"}
                 from src.db.audit import log_event
@@ -272,7 +273,8 @@ with tab1:
                 exp_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
                 can_args = canonical_json(args_dict)
                 create_approval(appr_id, session.sub, session.actor_role,
-                                tool_choice, can_args, args_sha256, exp_at)
+                                tool_choice, can_args, args_sha256, exp_at,
+                                tenant_id=session.tenant_id)
                 raw_result = {"approval_id": appr_id, "expires_in_seconds": 900,
                               "status": "PENDING", "decision": "ESCALATE"}
                 from src.db.audit import log_event
@@ -291,23 +293,28 @@ with tab1:
                     error = "EXPIRED: approval has passed its 15-minute TTL"
                 elif approval["requester_sub"] == session.sub:
                     error = "DUAL_CONTROL_VIOLATION: compliance_officer cannot approve their own request"
+                elif approval.get("tenant_id") and approval["tenant_id"] != session.tenant_id:
+                    error = f"TENANT_ISOLATION_VIOLATION: approval belongs to {approval['tenant_id']}, not {session.tenant_id}"
                 else:
                     orig_args = json.loads(approval["canonical_args_json"])
                     exp_sha = compute_args_sha256(approval["tool_name"], orig_args, approval["requester_sub"])
                     if exp_sha != approval["args_sha256"]:
                         error = "ARGUMENT_HASH_MISMATCH: approval binding invalid"
                     else:
-                        update_approval_status(appr_id, "CONSUMED", session.sub,
-                                               datetime.now(timezone.utc).isoformat())
-                        if approval["tool_name"] == "request_account_freeze":
-                            freeze_account(orig_args["account_id"])
-                            raw_result = {"result": "Account frozen successfully", "account_id": orig_args["account_id"]}
-                        elif approval["tool_name"] == "request_fee_refund":
-                            new_id = refund_transaction(orig_args["transaction_id"], orig_args["amount_cents"])
-                            raw_result = {"result": "Refund processed successfully", "new_txn_id": new_id}
-                        from src.db.audit import log_event
-                        log_event(session.sub, session.actor_role, session.tenant_id,
-                                  tool_choice, args_sha256, "EXECUTED", f"Executed {approval['tool_name']}")
+                        consumed = atomic_consume_approval(appr_id, session.sub,
+                                                           datetime.now(timezone.utc).isoformat())
+                        if not consumed:
+                            error = "ALREADY_CONSUMED: approval was consumed by a concurrent request"
+                        else:
+                            if approval["tool_name"] == "request_account_freeze":
+                                freeze_account(orig_args["account_id"])
+                                raw_result = {"result": "Account frozen successfully", "account_id": orig_args["account_id"]}
+                            elif approval["tool_name"] == "request_fee_refund":
+                                new_id = refund_transaction(orig_args["transaction_id"], orig_args["amount_cents"])
+                                raw_result = {"result": "Refund processed successfully", "new_txn_id": new_id}
+                            from src.db.audit import log_event
+                            log_event(session.sub, session.actor_role, session.tenant_id,
+                                      tool_choice, args_sha256, "EXECUTED", f"Executed {approval['tool_name']}")
         except Exception as ex:
             error = str(ex)
 
@@ -371,6 +378,7 @@ with tab2:
             with st.expander(f"🔶 [{appr['tool_name']}] · ID: {appr_id[:12]}... (Requested by: {appr['requester_sub']})"):
                 c1, c2 = st.columns(2)
                 with c1:
+                    st.markdown(f"**Tenant ID:** `{appr.get('tenant_id') or 'N/A'}`")
                     st.markdown(f"**Requester Sub:** `{appr['requester_sub']}`")
                     st.markdown(f"**Requester Role:** `{appr['requester_role']}`")
                     st.markdown(f"**Created At (UTC):** {appr['created_at']}")
@@ -393,6 +401,8 @@ with tab2:
                     st.warning("⚠️ Active role must be compliance_officer to approve.")
                 elif appr["requester_sub"] == co_session.sub:
                     st.error("🔒 **DUAL_CONTROL_VIOLATION**: Four-Eyes invariant prohibits self-approval. A different officer must approve.")
+                elif appr.get("tenant_id") and appr["tenant_id"] != co_session.tenant_id:
+                    st.error(f"🔒 **TENANT_ISOLATION_VIOLATION**: Request belongs to `{appr['tenant_id']}`. Acting officer is in `{co_session.tenant_id}`.")
                 else:
                     b1, b2 = st.columns(2)
                     if b1.button("✅ Approve Request", key=f"appr_{appr_id}"):

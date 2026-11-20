@@ -11,16 +11,40 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def init_database():
     """Initialize the test database once per test session."""
     from src.db.database import init_db
-    from src.db.audit import init_audit_table, verify_audit_chain, get_connection
+    from src.db.audit import init_audit_table
     init_db()
     init_audit_table()
-    
-    # If a previous run or workbench tamper experiment left audit_logs corrupt, reset it
-    chain_check = verify_audit_chain()
-    if not chain_check["ok"]:
-        with get_connection() as conn:
-            conn.execute("DELETE FROM audit_logs")
     yield
+
+
+@pytest.fixture(autouse=True)
+def clean_test_isolation():
+    """Ensure complete test isolation across all tests.
+    
+    Wipes audit_logs, pending_approvals, resets sqlite_sequence counters
+    so AUTOINCREMENT event_id always starts at 1, resets account freeze status,
+    and removes any refund transactions created during testing.
+    """
+    from src.db.database import get_connection
+    with get_connection() as conn:
+        conn.execute("DELETE FROM audit_logs")
+        conn.execute("DELETE FROM pending_approvals")
+        try:
+            conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('audit_logs', 'pending_approvals')")
+        except Exception:
+            pass
+        conn.execute("UPDATE accounts SET is_frozen=0")
+        conn.execute("DELETE FROM transactions WHERE txn_id LIKE 'TXN-REF-%'")
+    yield
+    with get_connection() as conn:
+        conn.execute("DELETE FROM audit_logs")
+        conn.execute("DELETE FROM pending_approvals")
+        try:
+            conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('audit_logs', 'pending_approvals')")
+        except Exception:
+            pass
+        conn.execute("UPDATE accounts SET is_frozen=0")
+        conn.execute("DELETE FROM transactions WHERE txn_id LIKE 'TXN-REF-%'")
 
 
 @pytest.fixture

@@ -47,12 +47,16 @@ def _compute_entry_hash(
     timestamp_utc: str,
     session_sub: str,
     actor_role: str,
+    tenant_id: str,
     tool_name: str,
     args_sha256: str,
     decision: str,
+    detail: str | None = None,
 ) -> str:
+    detail_str = detail if detail is not None else ""
     payload = "|".join(
-        [prev_hash, timestamp_utc, session_sub, actor_role, tool_name, args_sha256, decision]
+        [prev_hash, timestamp_utc, session_sub, actor_role, tenant_id,
+         tool_name, args_sha256, decision, detail_str]
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -84,7 +88,8 @@ def log_event(
 
         timestamp_utc = datetime.now(timezone.utc).isoformat()
         entry_hash = _compute_entry_hash(
-            prev_hash, timestamp_utc, session_sub, actor_role, tool_name, args_sha256, decision
+            prev_hash, timestamp_utc, session_sub, actor_role, tenant_id,
+            tool_name, args_sha256, decision, detail
         )
 
         cursor = conn.execute(
@@ -118,6 +123,7 @@ def get_audit_log(limit: int = 200) -> list[dict]:
 def verify_audit_chain() -> dict:
     """
     Re-walk the entire chain in event_id ascending order.
+    Detects hash tampering AND row deletions (event_id gaps).
     Returns {"ok": True} or {"ok": False, "corrupted_event_id": N, "reason": "..."}
     """
     with get_connection() as conn:
@@ -129,10 +135,22 @@ def verify_audit_chain() -> dict:
         return {"ok": True}
 
     prev_hash = "GENESIS"
+    prev_event_id = None
 
     for row in rows:
         row_dict = dict(row)
         event_id = row_dict["event_id"]
+
+        # Detect row deletions: event_id gaps (non-consecutive)
+        if prev_event_id is not None and event_id != prev_event_id + 1:
+            return {
+                "ok": False,
+                "corrupted_event_id": event_id,
+                "reason": (
+                    f"event_id gap detected: expected {prev_event_id + 1}, "
+                    f"got {event_id} (possible row deletion)"
+                ),
+            }
 
         # Verify stored prev_hash links correctly to previous row
         if row_dict["prev_hash"] != prev_hash:
@@ -145,15 +163,17 @@ def verify_audit_chain() -> dict:
                 ),
             }
 
-        # Recompute entry_hash from stored fields
+        # Recompute entry_hash from stored fields (now includes tenant_id + detail)
         expected_hash = _compute_entry_hash(
             row_dict["prev_hash"],
             row_dict["timestamp_utc"],
             row_dict["session_sub"],
             row_dict["actor_role"],
+            row_dict["tenant_id"],
             row_dict["tool_name"],
             row_dict["args_sha256"],
             row_dict["decision"],
+            row_dict["detail"],
         )
         if row_dict["entry_hash"] != expected_hash:
             return {
@@ -166,6 +186,7 @@ def verify_audit_chain() -> dict:
             }
 
         prev_hash = row_dict["entry_hash"]
+        prev_event_id = event_id
 
     return {"ok": True}
 

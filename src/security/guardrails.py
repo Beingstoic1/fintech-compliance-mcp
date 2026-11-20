@@ -1,18 +1,40 @@
 import re
 import hashlib
 import json
+import unicodedata
 from typing import Any
 
 from src.security.session import SessionRegistry, Session
+
+# Zero-width and invisible Unicode characters to strip before injection check
+_INVISIBLE_RE = re.compile(
+    r'[\u200b\u200c\u200d\u200e\u200f\u00ad\u2060\u2061\u2062\u2063\u2064\ufeff\u180e]'
+)
+
+# Common Cyrillic/Greek → Latin homoglyph confusables map
+_CONFUSABLES: dict[str, str] = {
+    # Cyrillic uppercase
+    '\u0410': 'A', '\u0412': 'B', '\u0415': 'E', '\u041d': 'H',
+    '\u041a': 'K', '\u041c': 'M', '\u041e': 'O', '\u0420': 'P', '\u0422': 'T',
+    '\u0425': 'X', '\u0423': 'Y', '\u0405': 'S',
+    # Cyrillic lowercase
+    '\u0430': 'a', '\u0435': 'e', '\u043e': 'o', '\u0440': 'p',
+    '\u0443': 'y', '\u0445': 'x', '\u0455': 's',
+    # Greek
+    '\u0391': 'A', '\u0392': 'B', '\u0395': 'E', '\u0396': 'Z', '\u0397': 'H',
+    '\u0399': 'I', '\u039a': 'K', '\u039c': 'M', '\u039d': 'N', '\u039f': 'O',
+    '\u03a1': 'P', '\u03a4': 'T', '\u03a5': 'Y', '\u03a7': 'X',
+    '\u03b1': 'a', '\u03b5': 'e', '\u03bf': 'o', '\u03c1': 'p',
+}
 
 # PII masking regexes
 ACCOUNT_NUMBER_RE = re.compile(r'\b(\d{8,16})\b')
 PAN_RE = re.compile(r'\b([A-Z]{5}\d{4}[A-Z])\b')       # e.g. ABCDE1234F
 TAX_ID_RE = re.compile(r'\b([A-Z]{2}-\d{7})\b')         # e.g. AB-1234567
 INJECTION_RE = re.compile(
-    r'(?i)(IGNORE\s+PREVIOUS\s+INSTRUCTIONS?|SYSTEM\s*PROMPT|JAILBREAK|'
-    r'DISREGARD\s+ALL|FORGET\s+(YOUR\s+)?INSTRUCTIONS?|'
-    r'DO\s+NOT\s+FOLLOW|OVERRIDE\s+(PREVIOUS\s+)?INSTRUCTIONS?)',
+    r'(?i)(IGNORE\s*PREVIOUS\s*INSTRUCTIONS?|SYSTEM\s*PROMPT|JAILBREAK|'
+    r'DISREGARD\s*ALL|FORGET\s*(YOUR\s*)?INSTRUCTIONS?|'
+    r'DO\s*NOT\s*FOLLOW|OVERRIDE\s*(PREVIOUS\s*)?INSTRUCTIONS?)',
     re.IGNORECASE
 )
 
@@ -56,13 +78,35 @@ def pre_check(session_token: str, tool_name: str, args: dict) -> Session:
 def _mask_string(value: str, session: Session) -> str:
     """
     For ALL roles: strip injection patterns → '[INJECTION STRIPPED]'
+    Uses Unicode normalization (NFKD → ASCII fold + confusables) to defeat
+    homoglyph/ZWSP evasion.
     For junior_analyst ONLY additionally:
       - Account numbers (8-16 digits): replace with '****' + last4
       - PAN 'ABCDE1234F' → 'XXXXX' + last4 chars of match (e.g. '234F')
       - Tax ID 'AB-1234567' → 'XX-XXX' + last4 chars (e.g. '4567')
     """
-    # First strip injections for ALL roles
-    result = INJECTION_RE.sub('[INJECTION STRIPPED]', value)
+    # --- Injection detection (all roles) ---
+    # 1. Strip zero-width / invisible characters
+    normalized = _INVISIBLE_RE.sub('', value)
+    # 2. NFKD normalize + drop combining marks
+    normalized = unicodedata.normalize('NFKD', normalized)
+    normalized = ''.join(
+        ch for ch in normalized if not unicodedata.combining(ch)
+    )
+    # 3. Apply confusables map (Cyrillic/Greek → Latin)
+    # Check both phonetic (С -> S) and visual (С -> C) substitutions
+    norm_s = ''.join({'\u0421': 'S', '\u0441': 's'}.get(ch, _CONFUSABLES.get(ch, ch)) for ch in normalized)
+    norm_c = ''.join({'\u0421': 'C', '\u0441': 'c'}.get(ch, _CONFUSABLES.get(ch, ch)) for ch in normalized)
+
+    # Check normalized variants and original form for injection
+    if INJECTION_RE.search(norm_s):
+        result = INJECTION_RE.sub('[INJECTION STRIPPED]', norm_s)
+    elif INJECTION_RE.search(norm_c):
+        result = INJECTION_RE.sub('[INJECTION STRIPPED]', norm_c)
+    elif INJECTION_RE.search(value):
+        result = INJECTION_RE.sub('[INJECTION STRIPPED]', value)
+    else:
+        result = value
 
     if session.actor_role == "junior_analyst":
         # Mask account numbers

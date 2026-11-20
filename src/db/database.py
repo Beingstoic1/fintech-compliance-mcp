@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS pending_approvals (
     approval_id         TEXT PRIMARY KEY,
     requester_sub       TEXT NOT NULL,
     requester_role      TEXT NOT NULL,
+    tenant_id           TEXT,
     tool_name           TEXT NOT NULL,
     canonical_args_json TEXT NOT NULL,
     args_sha256         TEXT NOT NULL,
@@ -460,16 +461,17 @@ def create_approval(
     canonical_args_json: str,
     args_sha256: str,
     expires_at: str,
+    tenant_id: str | None = None,
 ) -> None:
     created_at = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO pending_approvals
-               (approval_id, requester_sub, requester_role, tool_name,
+               (approval_id, requester_sub, requester_role, tenant_id, tool_name,
                 canonical_args_json, args_sha256, status, approver_sub,
                 created_at, expires_at, consumed_at)
-               VALUES (?,?,?,?,?,?,'PENDING',NULL,?,?,NULL)""",
-            (approval_id, requester_sub, requester_role, tool_name,
+               VALUES (?,?,?,?,?,?,?,'PENDING',NULL,?,?,NULL)""",
+            (approval_id, requester_sub, requester_role, tenant_id, tool_name,
              canonical_args_json, args_sha256, created_at, expires_at),
         )
 
@@ -487,6 +489,35 @@ def update_approval_status(
                WHERE approval_id=?""",
             (status, approver_sub, consumed_at, approval_id),
         )
+
+
+def atomic_consume_approval(
+    approval_id: str,
+    approver_sub: str,
+    consumed_at: str,
+) -> bool:
+    """Atomically transition approval from PENDING → CONSUMED.
+
+    Uses BEGIN IMMEDIATE + WHERE status='PENDING' to prevent TOCTOU races.
+    Returns True if exactly one row was consumed, False otherwise (already consumed / expired).
+    """
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        cursor = conn.execute(
+            """UPDATE pending_approvals
+               SET status='CONSUMED', approver_sub=?, consumed_at=?
+               WHERE approval_id=? AND status='PENDING'""",
+            (approver_sub, consumed_at, approval_id),
+        )
+        consumed = cursor.rowcount == 1
+        conn.commit()
+        return consumed
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def freeze_account(account_id: str) -> None:

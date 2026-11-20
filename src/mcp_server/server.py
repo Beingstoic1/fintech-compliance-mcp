@@ -17,7 +17,8 @@ except (ImportError, ModuleNotFoundError):
 from src.db.database import (
     get_account, get_transactions, detect_structuring,
     get_pending_approvals, get_approval, create_approval,
-    update_approval_status, freeze_account, refund_transaction,
+    update_approval_status, atomic_consume_approval,
+    freeze_account, refund_transaction,
 )
 from src.db.audit import log_event
 from src.security.session import SessionRegistry, DEMO_TOKENS
@@ -116,7 +117,8 @@ def request_account_freeze(session_token: str, account_id: str, reason: str) -> 
     approval_id = str(uuid.uuid4())
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
     create_approval(approval_id, session.sub, session.actor_role,
-                    tool_name, can_args, args_sha256, expires_at)
+                    tool_name, can_args, args_sha256, expires_at,
+                    tenant_id=session.tenant_id)
     log_event(session.sub, session.actor_role, session.tenant_id,
               tool_name, args_sha256, "ESCALATE",
               f"Approval created: {approval_id}")
@@ -150,7 +152,8 @@ def request_fee_refund(session_token: str, transaction_id: str,
     approval_id = str(uuid.uuid4())
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
     create_approval(approval_id, session.sub, session.actor_role,
-                    tool_name, can_args, args_sha256, expires_at)
+                    tool_name, can_args, args_sha256, expires_at,
+                    tenant_id=session.tenant_id)
     log_event(session.sub, session.actor_role, session.tenant_id,
               tool_name, args_sha256, "ESCALATE",
               f"Refund approval created: {approval_id}")
@@ -167,7 +170,8 @@ def request_fee_refund(session_token: str, transaction_id: str,
 def execute_approved_action(session_token: str, approval_id: str) -> dict:
     """
     compliance_officer only. Executes a previously approved action with Four-Eyes enforcement.
-    Verifies: approval status=PENDING, not expired, arg hash match, four-eyes (no self-approval).
+    Verifies: approval status=PENDING, not expired, arg hash match, four-eyes (no self-approval),
+    tenant isolation, and atomically consumes the approval to prevent TOCTOU races.
     """
     tool_name = "execute_approved_action"
     args = {"approval_id": approval_id}
@@ -209,6 +213,15 @@ def execute_approved_action(session_token: str, approval_id: str) -> dict:
         return {"error": "DUAL_CONTROL_VIOLATION: compliance_officer cannot approve their own request",
                 "decision": "BLOCK"}
 
+    # Tenant isolation enforcement (F4)
+    approval_tenant = approval.get("tenant_id")
+    if approval_tenant and approval_tenant != session.tenant_id:
+        log_event(session.sub, session.actor_role, session.tenant_id,
+                  tool_name, args_sha256, "BLOCK",
+                  f"TENANT_ISOLATION: approval tenant {approval_tenant} != session tenant {session.tenant_id}")
+        return {"error": "TENANT_ISOLATION_VIOLATION: approval belongs to a different tenant",
+                "decision": "BLOCK"}
+
     # Verify argument hash
     orig_args = json.loads(approval["canonical_args_json"])
     expected_sha256 = compute_args_sha256(
@@ -219,32 +232,43 @@ def execute_approved_action(session_token: str, approval_id: str) -> dict:
                   tool_name, args_sha256, "BLOCK", "ARGUMENT_HASH_MISMATCH")
         return {"error": "ARGUMENT_HASH_MISMATCH: approval binding invalid", "decision": "BLOCK"}
 
-    # Consume the approval
+    # Atomically consume the approval (F1 — prevents TOCTOU race)
     consumed_at = datetime.now(timezone.utc).isoformat()
-    update_approval_status(approval_id, "CONSUMED",
-                           approver_sub=session.sub,
-                           consumed_at=consumed_at)
+    was_consumed = atomic_consume_approval(approval_id, session.sub, consumed_at)
+    if not was_consumed:
+        log_event(session.sub, session.actor_role, session.tenant_id,
+                  tool_name, args_sha256, "BLOCK",
+                  "RACE_CONDITION: approval was already consumed by concurrent request")
+        return {"error": "ALREADY_CONSUMED: approval was consumed by a concurrent request",
+                "decision": "BLOCK"}
 
-    # Execute the actual action
+    # Execute the actual action (F7 — wrap in try/except to prevent error leakage)
     action_tool = approval["tool_name"]
     action_result = {}
-    if action_tool == "request_account_freeze":
-        freeze_account(orig_args["account_id"])
-        action_result = {
-            "result": "Account frozen successfully",
-            "account_id": orig_args["account_id"],
-        }
-    elif action_tool == "request_fee_refund":
-        new_txn_id = refund_transaction(
-            orig_args["transaction_id"], orig_args["amount_cents"]
-        )
-        action_result = {
-            "result": "Refund processed successfully",
-            "new_txn_id": new_txn_id,
-            "amount_cents": orig_args["amount_cents"],
-        }
-    else:
-        action_result = {"result": f"Unknown action: {action_tool}"}
+    try:
+        if action_tool == "request_account_freeze":
+            freeze_account(orig_args["account_id"])
+            action_result = {
+                "result": "Account frozen successfully",
+                "account_id": orig_args["account_id"],
+            }
+        elif action_tool == "request_fee_refund":
+            new_txn_id = refund_transaction(
+                orig_args["transaction_id"], orig_args["amount_cents"]
+            )
+            action_result = {
+                "result": "Refund processed successfully",
+                "new_txn_id": new_txn_id,
+                "amount_cents": orig_args["amount_cents"],
+            }
+        else:
+            action_result = {"result": f"Unknown action: {action_tool}"}
+    except Exception:
+        log_event(session.sub, session.actor_role, session.tenant_id,
+                  tool_name, args_sha256, "ERROR",
+                  f"Action execution failed for {action_tool}")
+        return {"error": "ACTION_EXECUTION_FAILED: internal error during action execution",
+                "decision": "BLOCK"}
 
     log_event(session.sub, session.actor_role, session.tenant_id,
               tool_name, args_sha256, "EXECUTED",
