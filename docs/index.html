@@ -992,8 +992,14 @@
         </p>
       </div>
       <div class="cta-actions">
-        <a id="ctaGithubBtn" href="#" target="_blank" class="btn btn-primary" style="width: 100%;">View on GitHub</a>
-        <a id="ctaWorkbenchBtn" href="#" target="_blank" class="btn btn-secondary" style="width: 100%;">Launch Live Workbench</a>
+        <a id="ctaEmailBtn" href="#" class="btn btn-primary" style="width: 100%;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          Get in Touch
+        </a>
+        <a id="ctaLinkedinBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+          Connect on LinkedIn
+        </a>
       </div>
     </section>
 
@@ -1002,9 +1008,11 @@
       <div>
         Fintech Compliance MCP · Designed & Engineered by <strong id="footerAuthor" style="color: var(--text-main);">Shubham Gupta</strong> · Licensed under Apache-2.0
       </div>
-      <div style="display: flex; gap: 18px;">
-        <a id="footerGithub" href="#" target="_blank">GitHub</a>
-        <a id="footerWorkbench" href="#" target="_blank">Live Workbench</a>
+      <div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap;">
+        <a id="footerGithub" href="#" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a id="footerWorkbench" href="#" target="_blank" rel="noopener noreferrer">Live Workbench</a>
+        <a id="footerLinkedin" href="#" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+        <a id="footerEmail" href="#">Contact</a>
         <a href="#pipeline">Architecture</a>
       </div>
     </footer>
@@ -1016,51 +1024,106 @@
      * TOP CONFIG BLOCK - Update your URLs here in 10 seconds!
      */
     const SITE_CONFIG = {
+      authorName: "Shubham Gupta",
       githubUrl: "https://github.com/Beingstoic1/fintech-compliance-mcp",
       showcaseUrl: "https://beingstoic1.github.io/fintech-compliance-mcp/",
-      liveWorkbenchUrl: "<PASTE_YOUR_STREAMLIT_APP_URL_HERE>",
-      authorName: "Shubham Gupta"
+      linkedinUrl: "https://www.linkedin.com/in/shubham112/",
+      email: "shubham987g@gmail.com",
+      emailSubject: "Compliance MCP & Fintech AI — Shubham Gupta",
+      liveWorkbenchUrl: "<YOUR_REAL_STREAMLIT_URL>"
     };
 
     // Apply config URLs to DOM
     document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("navGithub").href = SITE_CONFIG.githubUrl;
-      document.getElementById("heroGithubBtn").href = SITE_CONFIG.githubUrl;
-      document.getElementById("footerGithub").href = SITE_CONFIG.githubUrl;
+      // 1. GitHub Links
+      const githubLinks = ["navGithub", "heroGithubBtn", "footerGithub", "ctaGithubBtn"];
+      githubLinks.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.href = SITE_CONFIG.githubUrl;
+          el.target = "_blank";
+          el.rel = "noopener noreferrer";
+        }
+      });
 
-      // Handle workbench URLs gracefully if placeholder is still present
-      const isWorkbenchPlaceholder = !SITE_CONFIG.liveWorkbenchUrl || SITE_CONFIG.liveWorkbenchUrl.includes("<PASTE_");
+      // 2. Email / "Get in Touch" link with mailto and custom encoded subject
+      const encodedSubject = encodeURIComponent(SITE_CONFIG.emailSubject);
+      const mailtoUrl = `mailto:${SITE_CONFIG.email}?subject=${encodedSubject}`;
+      const emailLinks = ["ctaEmailBtn", "footerEmail"];
+      emailLinks.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.href = mailtoUrl;
+        }
+      });
+
+      // 3. LinkedIn Links
+      const linkedinLinks = ["ctaLinkedinBtn", "footerLinkedin"];
+      linkedinLinks.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.href = SITE_CONFIG.linkedinUrl;
+          el.target = "_blank";
+          el.rel = "noopener noreferrer";
+        }
+      });
+
+      // 4. Author Name
+      const authorEl = document.getElementById("footerAuthor");
+      if (authorEl) {
+        authorEl.textContent = SITE_CONFIG.authorName;
+      }
+
+      // 5. Handle workbench URLs gracefully if placeholder is still present
+      const isWorkbenchPlaceholder = !SITE_CONFIG.liveWorkbenchUrl ||
+        SITE_CONFIG.liveWorkbenchUrl.startsWith("<") ||
+        SITE_CONFIG.liveWorkbenchUrl.includes("<YOUR_") ||
+        SITE_CONFIG.liveWorkbenchUrl.includes("<PASTE_");
+
       const workbenchTarget = isWorkbenchPlaceholder ? "#sandbox" : SITE_CONFIG.liveWorkbenchUrl;
 
       const heroWb = document.getElementById("heroWorkbenchBtn");
-      heroWb.href = workbenchTarget;
-      if (isWorkbenchPlaceholder) {
-        heroWb.removeAttribute("target");
-        heroWb.title = "Local Demo Available in Interactive Sandbox Below";
+      if (heroWb) {
+        if (isWorkbenchPlaceholder) {
+          heroWb.href = "#sandbox";
+          heroWb.removeAttribute("target");
+          heroWb.innerHTML = `
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            Deploying on Streamlit Cloud · Try Sandbox Below
+          `;
+          heroWb.title = "Cloud instance provisioning — test the full pipeline in the interactive sandbox below!";
+        } else {
+          heroWb.href = SITE_CONFIG.liveWorkbenchUrl;
+          heroWb.target = "_blank";
+          heroWb.rel = "noopener noreferrer";
+        }
       }
 
       const footerWb = document.getElementById("footerWorkbench");
-      footerWb.href = workbenchTarget;
-      if (isWorkbenchPlaceholder) {
-        footerWb.removeAttribute("target");
+      if (footerWb) {
+        if (isWorkbenchPlaceholder) {
+          footerWb.href = "#sandbox";
+          footerWb.removeAttribute("target");
+          footerWb.textContent = "Workbench (Local/Sandbox)";
+          footerWb.title = "Cloud deployment in progress — run locally via 'streamlit run src/workbench/app.py' or use the sandbox";
+        } else {
+          footerWb.href = SITE_CONFIG.liveWorkbenchUrl;
+          footerWb.target = "_blank";
+          footerWb.rel = "noopener noreferrer";
+        }
       }
 
       const ctaWb = document.getElementById("ctaWorkbenchBtn");
       if (ctaWb) {
-        ctaWb.href = workbenchTarget;
         if (isWorkbenchPlaceholder) {
+          ctaWb.href = "#sandbox";
           ctaWb.removeAttribute("target");
+          ctaWb.textContent = "Try Interactive Sandbox";
+        } else {
+          ctaWb.href = SITE_CONFIG.liveWorkbenchUrl;
+          ctaWb.target = "_blank";
+          ctaWb.rel = "noopener noreferrer";
         }
-      }
-
-      const ctaGh = document.getElementById("ctaGithubBtn");
-      if (ctaGh) {
-        ctaGh.href = SITE_CONFIG.githubUrl;
-      }
-
-      const authorEl = document.getElementById("footerAuthor");
-      if (authorEl) {
-        authorEl.textContent = SITE_CONFIG.authorName;
       }
 
       initPipeline();

@@ -11,7 +11,7 @@
 
 ### 🌐 Live Demos & Interactive Resources
 - **[Interactive Product Showcase & Browser Sandbox (docs/index.html)](https://beingstoic1.github.io/fintech-compliance-mcp/)**: Zero-backend click-through pipeline, interactive PII toggle, injection filter demo, and client-side SHA-256 tamper lab.
-- **[Live Streamlit Compliance Workbench](<PASTE_YOUR_STREAMLIT_APP_URL_HERE>)**: Enterprise risk console with live guardrail simulator, Four-Eyes approval queue, and cryptographic tamper testing.
+- **Live Streamlit Compliance Workbench** *(Deploying on Streamlit Cloud — run locally via `PYTHONPATH=. streamlit run src/workbench/app.py` or explore the [Browser Sandbox](https://beingstoic1.github.io/fintech-compliance-mcp/))*: Enterprise risk console with live guardrail simulator, Four-Eyes approval queue, and cryptographic tamper testing.
 - **[Red-Team Security Audit Report (SECURITY_AUDIT_REPORT.md)](SECURITY_AUDIT_REPORT.md)**: Production sign-off audit verifying TOCTOU atomic approval locking, audit row-deletion detection, Unicode homoglyph/ZWSP prompt injection sanitization, and tenant isolation.
 
 ---
@@ -260,4 +260,4 @@ Indirect injection attacks hidden inside merchant transaction memos (e.g. `IGNOR
 ---
 
 ## 📜 Author & License
-Designed & Engineered by **Shubham Gupta** ([@Beingstoic1](https://github.com/Beingstoic1)) · Licensed under Apache-2.0
+Designed & Engineered by **Shubham Gupta** ([@Beingstoic1](https://github.com/Beingstoic1) · [LinkedIn](https://www.linkedin.com/in/shubham112/) · [Email](mailto:shubham987g@gmail.com?subject=Compliance%20MCP%20%26%20Fintech%20AI%20%E2%80%94%20Shubham%20Gupta)) · Licensed under Apache-2.0
