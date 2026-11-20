@@ -3,9 +3,15 @@ Fintech Compliance Officer Workbench — Streamlit App
 3-tab interactive enterprise UI: Guardrail Simulator | Approval Queue | Audit Ledger & Tamper Lab
 """
 import json
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# Ensure repository root is on sys.path so `src...` imports work regardless of launch command
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import pandas as pd
 import streamlit as st
