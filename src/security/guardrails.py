@@ -15,7 +15,7 @@ from src.security.binding import audit_digest  # noqa: F401  (keyed digest for a
 from src.security.identity import Principal, current_principal
 
 
-def canonical_json(args_dict: dict) -> str:
+def canonical_json(args_dict: dict[str, Any]) -> str:
     """json.dumps(sort_keys=True, separators=(',',':'), ensure_ascii=True)"""
     return json.dumps(args_dict, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
 
@@ -32,7 +32,7 @@ def pre_check(tool_name: str) -> Principal:
     return principal
 
 
-def post_process(result: Any, principal: Principal, tool_name: str, args_digest: str) -> dict:
+def post_process(result: Any, principal: Principal, tool_name: str, args_digest: str) -> dict[str, Any]:
     projected, redacted = project(result, tool_name, principal.role)
     return {
         "data": projected,

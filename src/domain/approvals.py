@@ -10,9 +10,10 @@ SQLite triggers in ``src.db.approvals`` (defense in depth).
 """
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Iterable, Mapping
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 APPROVAL_TTL = timedelta(minutes=15)
 
@@ -38,12 +39,12 @@ OFFICER = "compliance_officer"
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def to_iso(ts: datetime) -> str:
     """Fixed-width UTC ISO-8601 so lexical comparison in SQL equals time order."""
-    return ts.astimezone(timezone.utc).isoformat(timespec="microseconds")
+    return ts.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def can_transition(src: str, dst: str) -> bool:
@@ -80,7 +81,7 @@ def _status_denial(status: str) -> Verdict:
     return Verdict.deny(f"ALREADY_{status}", "approval cannot be used")
 
 
-def check_approve(approval: Mapping, *, sub: str, role: str, tenant_id: str,
+def check_approve(approval: Mapping[str, Any], *, sub: str, role: str, tenant_id: str,
                   amr: Iterable[str], now: datetime) -> Verdict:
     """Rules for a human officer's sign-off."""
     if role != OFFICER:
@@ -100,7 +101,7 @@ def check_approve(approval: Mapping, *, sub: str, role: str, tenant_id: str,
     return ALLOW
 
 
-def check_execute(approval: Mapping, *, sub: str, role: str, tenant_id: str,
+def check_execute(approval: Mapping[str, Any], *, sub: str, role: str, tenant_id: str,
                   now: datetime, idempotency_key: str | None = None) -> Verdict:
     """Rules for executing an approved action (the executor may be the approver)."""
     if role != OFFICER:
@@ -124,7 +125,7 @@ def check_execute(approval: Mapping, *, sub: str, role: str, tenant_id: str,
     return ALLOW
 
 
-def check_reject(approval: Mapping, *, role: str, tenant_id: str) -> Verdict:
+def check_reject(approval: Mapping[str, Any], *, role: str, tenant_id: str) -> Verdict:
     if role != OFFICER:
         return Verdict.deny("RBAC_BLOCK", "only a compliance_officer may reject")
     if not tenant_matches(approval.get("tenant_id"), tenant_id):

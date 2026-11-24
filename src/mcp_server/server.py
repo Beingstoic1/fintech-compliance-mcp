@@ -16,15 +16,24 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from mcp.server.auth.settings import AuthSettings  # noqa: E402
 from mcp.server.mcpserver import MCPServer  # noqa: E402
-from pydantic import ValidationError  # noqa: E402
+from pydantic import AnyHttpUrl, ValidationError  # noqa: E402
 
 from src.db.audit import log_event  # noqa: E402
 from src.db.database import detect_structuring, get_account, get_transactions  # noqa: E402
 from src.mcp_server.schemas import (  # noqa: E402
-    TOOL_INPUTS, AccountId, AmountCents, ApprovalId, DateBound, IdempotencyKey, QueryLimit,
-    Reason, ThresholdCents, TransactionId,
+    TOOL_INPUTS,
+    AccountId,
+    AmountCents,
+    ApprovalId,
+    DateBound,
+    IdempotencyKey,
+    QueryLimit,
+    Reason,
+    ThresholdCents,
+    TransactionId,
 )
-from src.security.guardrails import audit_digest, post_process, pre_check  # noqa: E402
+from src.security.binding import audit_digest  # noqa: E402
+from src.security.guardrails import post_process, pre_check  # noqa: E402
 from src.security.identity import ISSUER, JWTTokenVerifier, Principal, enable_stdio_identity  # noqa: E402
 from src.services import approvals as four_eyes  # noqa: E402
 
@@ -34,14 +43,14 @@ mcp = MCPServer(
     "fintech-compliance",
     token_verifier=JWTTokenVerifier(),
     auth=AuthSettings(
-        issuer_url=ISSUER,
-        resource_server_url=RESOURCE_URL,
+        issuer_url=AnyHttpUrl(ISSUER),
+        resource_server_url=AnyHttpUrl(RESOURCE_URL),
         validate_token_resource=False,  # JWTTokenVerifier enforces `aud` itself
     ),
 )
 
 
-def _guard(tool_name: str, raw_args: dict) -> tuple[Principal, Any, str] | dict:
+def _guard(tool_name: str, raw_args: dict[str, Any]) -> tuple[Principal, Any, str] | dict[str, Any]:
     """Authenticate, authorize, and strictly validate. Returns a BLOCK dict on failure."""
     try:
         principal = pre_check(tool_name)
@@ -62,13 +71,13 @@ def _guard(tool_name: str, raw_args: dict) -> tuple[Principal, Any, str] | dict:
     return principal, model, audit_digest(tool_name, model.model_dump(), principal.sub)
 
 
-def _block(p: Principal, tool_name: str, args_digest: str, code: str, message: str) -> dict:
+def _block(p: Principal, tool_name: str, args_digest: str, code: str, message: str) -> dict[str, Any]:
     log_event(p.sub, p.role, p.tenant_id, tool_name, args_digest, "BLOCK", code)
     return {"error": message, "decision": "BLOCK"}
 
 
 @mcp.tool()
-def get_account_profile(account_id: AccountId) -> dict:
+def get_account_profile(account_id: AccountId) -> dict[str, Any]:
     """Get an account profile in the caller's tenant. Fields are projected per role."""
     tool_name = "get_account_profile"
     g = _guard(tool_name, {"account_id": account_id})
@@ -87,7 +96,7 @@ def get_account_profile(account_id: AccountId) -> dict:
 
 @mcp.tool()
 def query_transactions(account_id: AccountId, start_date: DateBound = "",
-                       end_date: DateBound = "", limit: QueryLimit = 50) -> dict:
+                       end_date: DateBound = "", limit: QueryLimit = 50) -> dict[str, Any]:
     """Query an account's transactions (caller's tenant only). Memos are returned as untrusted text."""
     tool_name = "query_transactions"
     g = _guard(tool_name, {"account_id": account_id, "start_date": start_date,
@@ -107,7 +116,7 @@ def query_transactions(account_id: AccountId, start_date: DateBound = "",
 
 
 @mcp.tool()
-def detect_structuring_anomalies(threshold_cents: ThresholdCents = 999900) -> dict:
+def detect_structuring_anomalies(threshold_cents: ThresholdCents = 999900) -> dict[str, Any]:
     """Detect sub-threshold structuring / smurfing rings in the caller's tenant."""
     tool_name = "detect_structuring_anomalies"
     g = _guard(tool_name, {"threshold_cents": threshold_cents})
@@ -126,7 +135,7 @@ _ACTION_FIELDS = {"idempotency_key"}  # transport concerns, not part of the boun
 
 @mcp.tool()
 def request_account_freeze(account_id: AccountId, reason: Reason,
-                           idempotency_key: IdempotencyKey | None = None) -> dict:
+                           idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
     """senior_investigator only. Stages a 15-minute Four-Eyes approval for an account freeze.
     Pass an idempotency_key to make retries safe (same key + same args -> same approval_id)."""
     tool_name = "request_account_freeze"
@@ -140,7 +149,7 @@ def request_account_freeze(account_id: AccountId, reason: Reason,
 
 @mcp.tool()
 def request_fee_refund(transaction_id: TransactionId, amount_cents: AmountCents, reason: Reason,
-                       idempotency_key: IdempotencyKey | None = None) -> dict:
+                       idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
     """senior_investigator only. Stages a 15-minute Four-Eyes approval for a fee refund
     (amount in minor units; must not exceed the transaction's refundable balance)."""
     tool_name = "request_fee_refund"
@@ -154,7 +163,7 @@ def request_fee_refund(transaction_id: TransactionId, amount_cents: AmountCents,
 
 @mcp.tool()
 def execute_approved_action(approval_id: ApprovalId,
-                            idempotency_key: IdempotencyKey | None = None) -> dict:
+                            idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
     """
     compliance_officer only. Executes an action a human officer has already APPROVED
     (step-up sign-off happens in the approval console, never through this server).
@@ -170,7 +179,7 @@ def execute_approved_action(approval_id: ApprovalId,
 
 
 @mcp.tool()
-def reject_approved_action(approval_id: ApprovalId, reason: Reason) -> dict:
+def reject_approved_action(approval_id: ApprovalId, reason: Reason) -> dict[str, Any]:
     """compliance_officer only. Rejects a PENDING or APPROVED request (fail-safe direction)."""
     tool_name = "reject_approved_action"
     g = _guard(tool_name, {"approval_id": approval_id, "reason": reason})

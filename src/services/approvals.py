@@ -10,13 +10,18 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from src.db import approvals as repo
 from src.db.audit import log_event, maybe_checkpoint
 from src.db.database import (
-    freeze_account, get_account, get_connection, get_refunded_total, get_transaction,
+    freeze_account,
+    get_account,
+    get_connection,
+    get_refunded_total,
+    get_transaction,
     refund_transaction,
 )
 from src.domain import approvals as fsm
@@ -26,16 +31,15 @@ from src.security.binding import audit_digest, bind_args, verify_binding
 from src.security.guardrails import canonical_json
 from src.security.identity import Principal
 
-
 # ─── plumbing ────────────────────────────────────────────────────────────────
 
 def _block(p: Principal, tool: str, h: str, code: str, message: str,
-           conn: sqlite3.Connection | None = None) -> dict:
+           conn: sqlite3.Connection | None = None) -> dict[str, Any]:
     log_event(p.sub, p.role, p.tenant_id, tool, h, "BLOCK", code, conn=conn)
     return {"error": message, "decision": "BLOCK"}
 
 
-def _write_txn(work: Callable[[sqlite3.Connection], dict]) -> dict:
+def _write_txn(work: Callable[[sqlite3.Connection], dict[str, Any]]) -> dict[str, Any]:
     conn = get_connection()
     try:
         conn.execute("BEGIN IMMEDIATE")
@@ -53,12 +57,13 @@ def _write_txn(work: Callable[[sqlite3.Connection], dict]) -> dict:
 class _Abort(Exception):
     """Roll back the transaction, then return ``response`` (after auditing ``code``)."""
 
-    def __init__(self, code: str, response: dict, decision: str = "BLOCK"):
+    def __init__(self, code: str, response: dict[str, Any], decision: str = "BLOCK"):
         super().__init__(code)
         self.code, self.response, self.decision = code, response, decision
 
 
-def _run(p: Principal, tool: str, h: str, work: Callable[[sqlite3.Connection], dict]) -> dict:
+def _run(p: Principal, tool: str, h: str,
+         work: Callable[[sqlite3.Connection], dict[str, Any]]) -> dict[str, Any]:
     """Run ``work`` atomically. An ``_Abort`` rolls everything back and is audited
     in its own transaction, so a refused or failed action leaves no partial state."""
     try:
@@ -66,6 +71,15 @@ def _run(p: Principal, tool: str, h: str, work: Callable[[sqlite3.Connection], d
     except _Abort as a:
         log_event(p.sub, p.role, p.tenant_id, tool, h, a.decision, a.code)
         return a.response
+
+
+def _cas_refused() -> _Abort:
+    """The guarded UPDATE matched no row. Its predicate covers both status and
+    ``expires_at > now``, so the cause (a concurrent decision, or the TTL elapsing
+    after the read) is not known here; the code says so instead of guessing."""
+    return _Abort("STATE_CHANGED_OR_EXPIRED", {
+        "error": "STATE_CHANGED_OR_EXPIRED: approval changed state concurrently or its TTL elapsed",
+        "decision": "BLOCK"})
 
 
 def _deny(v: fsm.Verdict) -> _Abort:
@@ -76,7 +90,7 @@ def sweep_expired(tenant_id: str, now: datetime | None = None) -> int:
     """Move overdue PENDING/APPROVED approvals in ``tenant_id`` to EXPIRED."""
     now_iso = fsm.to_iso(now or fsm.utc_now())
 
-    def work(conn: sqlite3.Connection) -> dict:
+    def work(conn: sqlite3.Connection) -> dict[str, Any]:
         n = repo.expire_stale(conn, tenant_id, now_iso)
         if n:
             log_event("system", "system", tenant_id, "expire_sweeper",
@@ -84,10 +98,10 @@ def sweep_expired(tenant_id: str, now: datetime | None = None) -> int:
                       "EXPIRED", {"code": "APPROVALS_EXPIRED", "count": n}, conn=conn)
         return {"expired": n}
 
-    return _write_txn(work)["expired"]
+    return int(_write_txn(work)["expired"])
 
 
-def list_open(tenant_id: str) -> list[dict]:
+def list_open(tenant_id: str) -> list[dict[str, Any]]:
     conn = get_connection()
     try:
         return repo.list_for_tenant(conn, tenant_id)
@@ -95,7 +109,7 @@ def list_open(tenant_id: str) -> list[dict]:
         conn.close()
 
 
-def _escalation(row: dict, replayed: bool = False) -> dict:
+def _escalation(row: dict[str, Any], replayed: bool = False) -> dict[str, Any]:
     out = {
         "approval_id": row["approval_id"],
         "expires_in_seconds": int(fsm.APPROVAL_TTL.total_seconds()),
@@ -111,11 +125,11 @@ def _escalation(row: dict, replayed: bool = False) -> dict:
 
 # ─── staging ─────────────────────────────────────────────────────────────────
 
-def _stage(p: Principal, tool: str, args: dict, h: str, idempotency_key: str | None,
-           now: datetime) -> dict:
+def _stage(p: Principal, tool: str, args: dict[str, Any], h: str, idempotency_key: str | None,
+           now: datetime) -> dict[str, Any]:
     key_id, digest = bind_args(tool, args, p.sub, p.tenant_id)
 
-    def work(conn: sqlite3.Connection) -> dict:
+    def work(conn: sqlite3.Connection) -> dict[str, Any]:
         if idempotency_key:
             existing = repo.find_by_idempotency(conn, p.tenant_id, p.sub, idempotency_key)
             if existing is not None:
@@ -125,6 +139,9 @@ def _stage(p: Principal, tool: str, args: dict, h: str, idempotency_key: str | N
                     raise _Abort("IDEMPOTENCY_KEY_REUSED", {
                         "error": "IDEMPOTENCY_KEY_REUSED: key already used for a different request",
                         "decision": "BLOCK"})
+                log_event(p.sub, p.role, p.tenant_id, tool, h, "ALLOW",
+                          {"code": "IDEMPOTENT_REPLAY", "approval_id": existing["approval_id"]},
+                          conn=conn)
                 return _escalation(existing, replayed=True)
 
         approval_id = str(uuid.uuid4())
@@ -134,21 +151,24 @@ def _stage(p: Principal, tool: str, args: dict, h: str, idempotency_key: str | N
                     expires_at=fsm.to_iso(now + fsm.APPROVAL_TTL), idempotency_key=idempotency_key)
         log_event(p.sub, p.role, p.tenant_id, tool, h, "ESCALATE",
                   {"code": "APPROVAL_CREATED", "approval_id": approval_id}, conn=conn)
-        return _escalation(repo.get(conn, approval_id, p.tenant_id))
+        created = repo.get(conn, approval_id, p.tenant_id)
+        if created is None:  # inserted in this same transaction
+            raise RuntimeError("staged approval not readable in its own transaction")
+        return _escalation(created)
 
     return _run(p, tool, h, work)
 
 
-def stage_freeze(p: Principal, args: dict, h: str, idempotency_key: str | None = None,
-                 now: datetime | None = None) -> dict:
+def stage_freeze(p: Principal, args: dict[str, Any], h: str, idempotency_key: str | None = None,
+                 now: datetime | None = None) -> dict[str, Any]:
     tool = "request_account_freeze"
     if not get_account(args["account_id"], p.tenant_id):
         return _block(p, tool, h, "NOT_FOUND", "Account not found in your tenant scope")
     return _stage(p, tool, args, h, idempotency_key, now or fsm.utc_now())
 
 
-def stage_refund(p: Principal, args: dict, h: str, idempotency_key: str | None = None,
-                 now: datetime | None = None) -> dict:
+def stage_refund(p: Principal, args: dict[str, Any], h: str, idempotency_key: str | None = None,
+                 now: datetime | None = None) -> dict[str, Any]:
     tool = "request_fee_refund"
     # Tenant-scoped: another tenant's transaction is indistinguishable from a missing one.
     txn = get_transaction(args["transaction_id"], p.tenant_id)
@@ -170,8 +190,8 @@ def stage_refund(p: Principal, args: dict, h: str, idempotency_key: str | None =
 
 # ─── human sign-off / rejection ──────────────────────────────────────────────
 
-def _bound_args(row: dict) -> dict:
-    args = json.loads(row["canonical_args_json"])
+def _bound_args(row: dict[str, Any]) -> dict[str, Any]:
+    args: dict[str, Any] = json.loads(row["canonical_args_json"])
     if not verify_binding(row["key_id"], row["args_digest"], row["tool_name"], args,
                           row["requester_sub"], row["tenant_id"]):
         raise _Abort("ARGUMENT_BINDING_INVALID", {
@@ -180,14 +200,14 @@ def _bound_args(row: dict) -> dict:
     return args
 
 
-def approve(p: Principal, approval_id: str, now: datetime | None = None) -> dict:
+def approve(p: Principal, approval_id: str, now: datetime | None = None) -> dict[str, Any]:
     """Human compliance-officer sign-off. Not exposed as an MCP tool: it requires a
     step-up-authenticated principal (``amr``) from the approval console."""
     tool, now = "approve_action", now or fsm.utc_now()
     h = audit_digest(tool, {"approval_id": approval_id}, p.sub)
     sweep_expired(p.tenant_id, now)
 
-    def work(conn: sqlite3.Connection) -> dict:
+    def work(conn: sqlite3.Connection) -> dict[str, Any]:
         row = repo.get(conn, approval_id, p.tenant_id)
         if row is None:
             raise _Abort("NOT_FOUND", {"error": "Approval not found", "decision": "BLOCK"})
@@ -199,8 +219,7 @@ def approve(p: Principal, approval_id: str, now: datetime | None = None) -> dict
         if not repo.transition(conn, approval_id, p.tenant_id, (fsm.PENDING,), fsm.APPROVED,
                                unexpired_at=now_iso, approver_sub=p.sub, approved_at=now_iso,
                                approved_amr=json.dumps(sorted(p.amr))):
-            raise _Abort("ALREADY_DECIDED", {"error": "ALREADY_DECIDED: approval state changed",
-                                             "decision": "BLOCK"})
+            raise _cas_refused()
         log_event(p.sub, p.role, p.tenant_id, tool, h, "APPROVED",
                   {"code": "APPROVED", "approval_id": approval_id}, conn=conn)
         return {"decision": "APPROVED", "approval_id": approval_id, "approved_by": p.sub}
@@ -209,10 +228,10 @@ def approve(p: Principal, approval_id: str, now: datetime | None = None) -> dict
 
 
 def reject(p: Principal, approval_id: str, reason: str, h: str,
-           now: datetime | None = None) -> dict:
+           now: datetime | None = None) -> dict[str, Any]:
     tool, now = "reject_approved_action", now or fsm.utc_now()
 
-    def work(conn: sqlite3.Connection) -> dict:
+    def work(conn: sqlite3.Connection) -> dict[str, Any]:
         row = repo.get(conn, approval_id, p.tenant_id)
         if row is None:
             raise _Abort("NOT_FOUND", {"error": "Approval not found", "decision": "BLOCK"})
@@ -234,7 +253,7 @@ def reject(p: Principal, approval_id: str, reason: str, h: str,
 
 # ─── execution ───────────────────────────────────────────────────────────────
 
-def _perform(conn: sqlite3.Connection, row: dict, args: dict) -> dict[str, Any]:
+def _perform(conn: sqlite3.Connection, row: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
     if row["tool_name"] == "request_account_freeze":
         freeze_account(args["account_id"], row["tenant_id"], conn=conn)
         return {"result": "Account frozen successfully", "account_id": args["account_id"]}
@@ -245,7 +264,7 @@ def _perform(conn: sqlite3.Connection, row: dict, args: dict) -> dict[str, Any]:
 
 
 def execute(p: Principal, approval_id: str, h: str, idempotency_key: str | None = None,
-            now: datetime | None = None) -> dict:
+            now: datetime | None = None) -> dict[str, Any]:
     """Consume an APPROVED approval and perform its action, atomically with the audit row.
 
     A failed action rolls back the consume too: the approval is not burned.
@@ -254,7 +273,7 @@ def execute(p: Principal, approval_id: str, h: str, idempotency_key: str | None 
     tool, now = "execute_approved_action", now or fsm.utc_now()
     sweep_expired(p.tenant_id, now)
 
-    def work(conn: sqlite3.Connection) -> dict:
+    def work(conn: sqlite3.Connection) -> dict[str, Any]:
         row = repo.get(conn, approval_id, p.tenant_id)
         if row is None:
             raise _Abort("NOT_FOUND", {"error": "Approval not found", "decision": "BLOCK"})
@@ -271,11 +290,11 @@ def execute(p: Principal, approval_id: str, h: str, idempotency_key: str | None 
         try:
             action_result = _perform(conn, row, args)
         except RefundRuleViolation as e:
-            raise _Abort(e.code, {"error": e.code, "decision": "BLOCK"})
-        except Exception:
+            raise _Abort(e.code, {"error": e.code, "decision": "BLOCK"}) from None
+        except Exception:  # noqa: BLE001 - any action failure rolls back and is audited as ERROR
             raise _Abort("ACTION_EXECUTION_FAILED", {
                 "error": "ACTION_EXECUTION_FAILED: internal error during action execution",
-                "decision": "BLOCK"}, decision="ERROR")
+                "decision": "BLOCK"}, decision="ERROR") from None
 
         result = {"decision": "EXECUTED", "approval_id": approval_id, "action": row["tool_name"],
                   "approved_by": row["approver_sub"], "executed_by": p.sub,
@@ -285,9 +304,7 @@ def execute(p: Principal, approval_id: str, h: str, idempotency_key: str | None 
                                unexpired_at=now_iso, executed_by_sub=p.sub, consumed_at=now_iso,
                                execution_idempotency_key=idempotency_key,
                                execution_result_json=json.dumps(result, sort_keys=True)):
-            raise _Abort("ALREADY_CONSUMED", {
-                "error": "ALREADY_CONSUMED: approval was consumed by a concurrent request",
-                "decision": "BLOCK"})
+            raise _cas_refused()
         detail = {"code": "EXECUTED", "approval_id": approval_id, "action": row["tool_name"]}
         if "new_txn_id" in action_result:
             detail["new_txn_id"] = action_result["new_txn_id"]

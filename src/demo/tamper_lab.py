@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from src.db import audit
 from src.db.database import get_connection

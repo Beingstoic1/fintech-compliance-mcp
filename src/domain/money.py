@@ -21,7 +21,7 @@ class Money:
     currency: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.amount, Decimal) or isinstance(self.amount, bool):
+        if not isinstance(self.amount, Decimal):  # bool/int/float are not Decimal
             raise MoneyError("AMOUNT_MUST_BE_DECIMAL")
         if not self.amount.is_finite():
             raise MoneyError("AMOUNT_NOT_FINITE")

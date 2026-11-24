@@ -13,8 +13,9 @@ Works with any DB-API-like connection exposing psycopg 3's ``transaction()`` and
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 TENANT_ID_RE = re.compile(r"^[a-z0-9_]{3,64}$")   # matches the tenants.tenant_id CHECK
 SET_TENANT_SQL = "SELECT set_config('app.tenant_id', %s, true)"

@@ -19,6 +19,8 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "ruff==0.17.6",   # pinned: lint results must not drift between CI runs
+    "mypy==2.4.1",
 ]
 postgres = [
     "psycopg[binary]>=3.2",
@@ -33,3 +35,34 @@ asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+markers = [
+    "audit_pii_sweep: T21 suite-wide audit PII scan; collection moves it to the end of the run",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = [".agents", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "RUF"]
+ignore = [
+    "S101",    # assert is the test idiom
+    "S608",    # SQL is built only from module constants / allowlisted identifiers, values are bound
+    "RUF001", "RUF002", "RUF003",  # confusable/invisible characters are deliberate test data; en dashes in prose
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311", "B017", "BLE001"]  # BLE001: thread workers re-raise in the main thread
+"src/db/database.py" = ["E501"]   # tabular seed data
+"src/workbench/app.py" = ["E501", "E402", "BLE001"]  # UI markup; sys.path bootstrap; UI never surfaces exception text
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["streamlit.*", "pandas.*", "psycopg.*"]
+ignore_missing_imports = true

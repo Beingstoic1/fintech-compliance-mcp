@@ -154,6 +154,17 @@ BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'APPROVAL_ROW_IMMUTABLE' USING ERRCODE = 'integrity_constraint_violation';
     END IF;
+    -- A row is born PENDING with no decision columns: the app's INSERT grant covers
+    -- every column, so without this a compromised app could insert an APPROVED row.
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status <> 'PENDING' OR num_nonnulls(
+               NEW.approver_sub, NEW.approved_at, NEW.approved_amr, NEW.rejected_by_sub,
+               NEW.rejected_at, NEW.rejection_reason, NEW.executed_by_sub, NEW.consumed_at,
+               NEW.execution_idempotency_key, NEW.execution_result_json) > 0 THEN
+            RAISE EXCEPTION 'ILLEGAL_APPROVAL_INSERT' USING ERRCODE = 'check_violation';
+        END IF;
+        RETURN NEW;
+    END IF;
     IF NOT ((OLD.status = 'PENDING'  AND NEW.status IN ('APPROVED', 'REJECTED', 'EXPIRED'))
          OR (OLD.status = 'APPROVED' AND NEW.status IN ('CONSUMED', 'REJECTED', 'EXPIRED'))) THEN
         RAISE EXCEPTION 'ILLEGAL_APPROVAL_TRANSITION' USING ERRCODE = 'check_violation';
@@ -172,7 +183,7 @@ END
 $$;
 
 CREATE TRIGGER pending_approvals_guard
-    BEFORE UPDATE OR DELETE ON fintech.pending_approvals
+    BEFORE INSERT OR UPDATE OR DELETE ON fintech.pending_approvals
     FOR EACH ROW EXECUTE FUNCTION fintech.pending_approvals_guard();
 
 -- ─── audit ledger (mirrors src/db/audit.py v2) ──────────────────────────────

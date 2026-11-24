@@ -24,14 +24,20 @@ import json
 import logging
 import os
 import sqlite3
-from datetime import datetime, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 from src.db.database import DB_PATH, get_connection
 from src.domain.ledger import (
-    DECISIONS, GENESIS, LEGACY_V1_PREFIX, MAX_DETAIL_CHARS, checkpoint_preimage,
-    entry_preimage, normalize_detail,
+    DECISIONS,
+    GENESIS,
+    LEGACY_V1_PREFIX,
+    MAX_DETAIL_CHARS,
+    checkpoint_preimage,
+    entry_preimage,
+    normalize_detail,
 )
 from src.security.keys import Keyring
 
@@ -70,8 +76,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 _META_DDL = "CREATE TABLE IF NOT EXISTS audit_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)"
 
-_APPEND_ONLY_TABLES = ("audit_logs", "audit_meta", "audit_logs_legacy_v1")
-TRIGGER_NAMES = tuple(f"trg_{t}_{op}" for t in _APPEND_ONLY_TABLES for op in ("no_update", "no_delete"))
+# table -> condition under which an INSERT would overwrite history. ``INSERT OR
+# REPLACE`` deletes the conflicting row without firing DELETE triggers (SQLite runs
+# them only with recursive_triggers on), so overwrites are refused up front. The
+# legacy v1 archive is frozen outright.
+_OVERWRITE_GUARD = {
+    "audit_logs": "EXISTS (SELECT 1 FROM audit_logs WHERE event_id = NEW.event_id)",
+    "audit_meta": "EXISTS (SELECT 1 FROM audit_meta WHERE k = NEW.k)",
+    "audit_logs_legacy_v1": "1",
+}
+_APPEND_ONLY_TABLES = tuple(_OVERWRITE_GUARD)
+_OPS = (("no_update", "UPDATE"), ("no_delete", "DELETE"), ("no_overwrite", "INSERT"))
+TRIGGER_NAMES = tuple(f"trg_{t}_{op}" for t in _APPEND_ONLY_TABLES for op, _ in _OPS)
 
 
 def install_triggers(conn: sqlite3.Connection) -> None:
@@ -79,9 +95,10 @@ def install_triggers(conn: sqlite3.Connection) -> None:
     for table in _APPEND_ONLY_TABLES:
         if table not in existing:
             continue
-        for op, verb in (("no_update", "UPDATE"), ("no_delete", "DELETE")):
+        for op, verb in _OPS:
+            when = f" WHEN {_OVERWRITE_GUARD[table]}" if verb == "INSERT" else ""
             conn.execute(
-                f"CREATE TRIGGER IF NOT EXISTS trg_{table}_{op} BEFORE {verb} ON {table} "
+                f"CREATE TRIGGER IF NOT EXISTS trg_{table}_{op} BEFORE {verb} ON {table}{when} "
                 f"BEGIN SELECT RAISE(ABORT, 'AUDIT_LOG_APPEND_ONLY'); END"
             )
 
@@ -105,7 +122,8 @@ def init_audit_table() -> None:
                 genesis = LEGACY_V1_PREFIX + head[0]
         conn.execute(_AUDIT_DDL)
         conn.execute(_META_DDL)
-        conn.execute("INSERT OR IGNORE INTO audit_meta (k, v) VALUES ('genesis', ?)", (genesis,))
+        conn.execute("INSERT INTO audit_meta (k, v) SELECT 'genesis', ? "
+                     "WHERE NOT EXISTS (SELECT 1 FROM audit_meta WHERE k = 'genesis')", (genesis,))
         install_triggers(conn)
         conn.commit()
     except Exception:
@@ -150,9 +168,9 @@ class CheckpointStore(Protocol):
     delete or overwrite objects.
     """
 
-    def append(self, record: dict) -> None: ...
+    def append(self, record: dict[str, Any]) -> None: ...
 
-    def latest(self) -> dict | None: ...
+    def latest(self) -> dict[str, Any] | None: ...
 
 
 class FileCheckpointStore:
@@ -161,7 +179,7 @@ class FileCheckpointStore:
     def __init__(self, path: Path):
         self.path = Path(path)
 
-    def append(self, record: dict) -> None:
+    def append(self, record: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
         with open(self.path, "a", encoding="utf-8") as fh:
@@ -171,7 +189,7 @@ class FileCheckpointStore:
             fh.flush()
             os.fsync(fh.fileno())
 
-    def latest(self) -> dict | None:
+    def latest(self) -> dict[str, Any] | None:
         try:
             with open(self.path, encoding="utf-8") as fh:
                 if fcntl:
@@ -179,7 +197,7 @@ class FileCheckpointStore:
                 lines = fh.readlines()
         except FileNotFoundError:
             return None
-        best: dict | None = None
+        best: dict[str, Any] | None = None
         for line in lines:
             try:
                 rec = json.loads(line)
@@ -206,11 +224,11 @@ def set_checkpoint_store(store: CheckpointStore) -> None:
     _store = store
 
 
-def _checkpoint_fields(rec: Mapping[str, Any]) -> dict:
+def _checkpoint_fields(rec: Mapping[str, Any]) -> dict[str, Any]:
     return {k: rec[k] for k in ("event_id", "head", "genesis", "ts", "key_id")}
 
 
-def checkpoint() -> dict | None:
+def checkpoint() -> dict[str, Any] | None:
     """Sign the current head and append it to the external store."""
     conn = get_connection()
     try:
@@ -223,7 +241,7 @@ def checkpoint() -> dict | None:
         return None
     kid = _RING.active_kid
     rec = {"event_id": head["event_id"], "head": head["entry_hash"], "genesis": genesis,
-           "ts": datetime.now(timezone.utc).isoformat(timespec="microseconds"), "key_id": kid}
+           "ts": datetime.now(UTC).isoformat(timespec="microseconds"), "key_id": kid}
     rec["sig"] = _RING.mac(kid, checkpoint_preimage(**rec))
     _store.append(rec)
     return rec
@@ -266,14 +284,14 @@ def _append(conn: sqlite3.Connection, session_sub: str, actor_role: str, tenant_
     head = conn.execute(
         "SELECT event_id, entry_hash FROM audit_logs ORDER BY event_id DESC LIMIT 1").fetchone()
     if head:
-        event_id, prev_hash = head["event_id"] + 1, head["entry_hash"]
+        event_id, prev_hash = int(head["event_id"]) + 1, str(head["entry_hash"])
     else:
         genesis = _genesis(conn)
         if genesis is None:
             raise RuntimeError("audit ledger not initialised")
         event_id, prev_hash = 1, genesis
     row = {
-        "event_id": event_id, "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+        "event_id": event_id, "timestamp_utc": datetime.now(UTC).isoformat(timespec="microseconds"),
         "session_sub": session_sub, "actor_role": actor_role, "tenant_id": tenant_id,
         "tool_name": tool_name, "args_digest": args_digest, "decision": decision,
         "detail": normalize_detail(detail), "key_id": _RING.active_kid, "prev_hash": prev_hash,
@@ -328,7 +346,7 @@ def log_event(
 # Read / verify
 # ---------------------------------------------------------------------------
 
-def get_audit_log(limit: int = 200) -> list[dict]:
+def get_audit_log(limit: int = 200) -> list[dict[str, Any]]:
     """Return up to *limit* rows from audit_logs, most recent first."""
     conn = get_connection()
     try:
@@ -339,12 +357,12 @@ def get_audit_log(limit: int = 200) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def _fail(event_id: int | None, reason: str, message: str, checked: int) -> dict:
+def _fail(event_id: int | None, reason: str, message: str, checked: int) -> dict[str, Any]:
     return {"ok": False, "corrupted_event_id": event_id, "reason": reason,
             "message": message, "checked": checked}
 
 
-def verify_audit_chain(store: CheckpointStore | None = None) -> dict:
+def verify_audit_chain(store: CheckpointStore | None = None) -> dict[str, Any]:
     """
     Stream the ledger in event_id order and verify, per row: consecutive ids from 1,
     ``prev_hash`` linkage (row 1 links to the stored genesis), a known ``key_id`` and
@@ -388,7 +406,7 @@ def verify_audit_chain(store: CheckpointStore | None = None) -> dict:
                          "latest external checkpoint has an invalid signature", checked)
         if cp["genesis"] != genesis:
             return _fail(None, "GENESIS_MISMATCH", "ledger genesis differs from the checkpoint", checked)
-        if checked < cp_id:
+        if checked < cp["event_id"]:  # latest() only yields int event_ids
             return _fail(checked + 1, "TRUNCATION_DETECTED",
                          f"ledger ends at event_id {checked} but a checkpoint covers {cp_id}", checked)
         if head_at_cp != cp["head"]:

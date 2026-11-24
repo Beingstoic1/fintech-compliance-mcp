@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-and-scan:
-    name: pytest + mcp-scan
+    name: ruff + mypy + pytest + mcp-scan
     runs-on: ubuntu-latest
 
     steps:
@@ -25,12 +25,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
+          pip install "pytest>=8.0" "pytest-asyncio>=0.23" "ruff==0.17.6" "mypy==2.4.1"
 
-      - name: Run pytest suite
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type-check (mypy --strict, config in pyproject.toml)
+        run: mypy src
+
+      - name: Run pytest suite (incl. adversarial + no-float-in-domain rule)
         env:
           PYTHONPATH: .
-        run: pytest -v --tb=short tests/
+        run: python -m pytest -p no:cacheprovider -v --tb=short tests/
 
       - name: Run MCP security scan
         uses: nhomyk/mcp-scan-action@v1

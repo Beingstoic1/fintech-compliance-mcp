@@ -22,16 +22,16 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, TypeVar
+from typing import Any, TypeVar
 
 import jwt
-
-from src.domain.policy import ROLES
-
 from mcp.server.auth.middleware.auth_context import auth_context_var, get_access_token
 from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
 from mcp.server.auth.provider import AccessToken
+
+from src.domain.policy import ROLES
 
 T = TypeVar("T")
 

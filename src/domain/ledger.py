@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 CHAIN_VERSION = 2
 GENESIS = "GENESIS"

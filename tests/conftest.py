@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 @pytest.fixture(scope="session", autouse=True)
 def init_database():
     """Initialize the test database once per test session."""
-    from src.db.database import DB_PATH, DEFAULT_DB_PATH, init_db
     from src.db.audit import init_audit_table
+    from src.db.database import DB_PATH, DEFAULT_DB_PATH, init_db
     assert DB_PATH.resolve() != DEFAULT_DB_PATH.resolve(), "tests must not use the real ledger DB"
     assert str(DB_PATH).startswith(_TEST_DB_DIR)
     init_db()
@@ -29,10 +29,24 @@ def init_database():
     shutil.rmtree(_TEST_DB_DIR, ignore_errors=True)
 
 
+# T21: every audit row written by any test is harvested before the per-test wipe,
+# so the PII sweep (marked ``audit_pii_sweep``, ordered last) sees the whole suite.
+_AUDIT_HARVEST: list[dict] = []
+
+
+def pytest_collection_modifyitems(config, items):
+    items.sort(key=lambda item: item.get_closest_marker("audit_pii_sweep") is not None)
+
+
+@pytest.fixture
+def audit_harvest() -> list[dict]:
+    return _AUDIT_HARVEST
+
+
 @pytest.fixture(autouse=True)
 def clean_test_isolation():
     """Ensure complete test isolation across all tests.
-    
+
     The audit ledger is append-only (triggers), so it is wiped through the
     privileged tamper-lab reset (rows, sequence, checkpoint file). Also clears
     pending_approvals, account freezes, and refund rows created during tests.
@@ -47,9 +61,18 @@ def clean_test_isolation():
             conn.execute("DELETE FROM sqlite_sequence WHERE name='pending_approvals'")
             conn.execute("UPDATE accounts SET is_frozen=0")
             conn.execute("DELETE FROM transactions WHERE txn_id LIKE 'TXN-REF-%'")
+            conn.execute("DELETE FROM transactions WHERE txn_id LIKE 'TXN-ADV-%'")  # adversarial fixtures
+
+    def _harvest() -> None:
+        conn = get_connection()
+        try:
+            _AUDIT_HARVEST.extend(dict(r) for r in conn.execute("SELECT * FROM audit_logs"))
+        finally:
+            conn.close()
 
     _reset()
     yield
+    _harvest()
     _reset()
 
 
@@ -188,3 +211,38 @@ def approve_as():
             return four_eyes.approve(officer, approval_id, now=now)
 
     return _approve
+
+
+@pytest.fixture
+def debit_txn(db_query):
+    """debit_txn(tenant_id="tenant_neobank_in") -> first seeded debit {txn_id, amount_cents}."""
+    def _debit(tenant_id: str = "tenant_neobank_in") -> dict:
+        rows = db_query("SELECT txn_id, amount_cents FROM transactions WHERE tenant_id=? "
+                        "AND txn_type='debit' AND txn_id NOT LIKE 'TXN-ADV-%' "
+                        "ORDER BY txn_id LIMIT 1", (tenant_id,))
+        assert rows, "seed data must contain a debit for the tenant"
+        return rows[0]
+    return _debit
+
+
+@pytest.fixture
+def insert_txn():
+    """insert_txn(txn_id, account_id, tenant_id, memo, created_at, amount_cents=100) -> None.
+
+    Adversarial fixture rows must use the ``TXN-ADV-`` prefix (wiped after each test).
+    """
+    from src.db.database import get_connection
+
+    def _insert(txn_id: str, account_id: str, tenant_id: str, memo: str, created_at: str,
+                amount_cents: int = 100) -> None:
+        assert txn_id.startswith("TXN-ADV-")
+        conn = get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO transactions (txn_id, tenant_id, account_id, merchant_id, amount_cents,"
+                " currency, txn_type, status, memo, created_at) VALUES (?,?,?,NULL,?,'INR','debit',"
+                "'completed',?,?)", (txn_id, tenant_id, account_id, amount_cents, memo, created_at))
+            conn.commit()
+        finally:
+            conn.close()
+    return _insert

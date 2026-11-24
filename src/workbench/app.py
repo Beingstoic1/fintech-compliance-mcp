@@ -5,9 +5,8 @@ Institutional Zero-Trust AI Guardrails Console
 """
 import json
 import sys
-import uuid
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 # Ensure repository root is on sys.path so `src...` imports work regardless of launch command
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -214,15 +213,19 @@ st.markdown("""
 
 # Auto-initialize and seed DB on startup
 try:
+    from src.db.audit import get_audit_log, init_audit_table, verify_audit_chain
     from src.db.database import (
-        DB_PATH, init_db, get_account, get_transactions, detect_structuring,
+        DB_PATH,
+        detect_structuring,
+        get_account,
+        get_transactions,
+        init_db,
     )
-    from src.domain import approvals as fsm
-    from src.services import approvals as four_eyes
-    from src.db.audit import get_audit_log, verify_audit_chain, init_audit_table
     from src.demo import tamper_lab
-    from src.security.session import DEMO_DIRECTORY
+    from src.domain import approvals as fsm
     from src.security.identity import authenticated, call_as, issue_demo_token, verify_jwt
+    from src.security.session import DEMO_DIRECTORY
+    from src.services import approvals as four_eyes
     # Ensure directory and database are initialized
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     init_db()
@@ -254,8 +257,8 @@ st.markdown("""
     <span class="header-tag">Operational Security Specification</span>
   </div>
   <p style="margin: 0; color: #94a3b8; font-size: 13px;">
-    Autonomous financial agents executing directly against core-banking ledgers create catastrophic failure modes: 
-    hallucinated fee refunds, unauthorized account freezes, and prompt injection data exfiltration. 
+    Autonomous financial agents executing directly against core-banking ledgers create catastrophic failure modes:
+    hallucinated fee refunds, unauthorized account freezes, and prompt injection data exfiltration.
     This system enforces three deterministic guarantees between the LLM and your financial infrastructure:
   </p>
   <div class="jtbd-grid">
@@ -326,7 +329,7 @@ with tab1:
     ])
 
     # Dynamic argument inputs
-    args_dict = {}
+    args_dict: dict[str, Any] = {}
     if tool_choice == "get_account_profile":
         account_id = st.text_input("account_id", value="ACC-001", help="Try ACC-001 or ACC-005")
         args_dict = {"account_id": account_id}
@@ -364,7 +367,8 @@ with tab1:
         # Every tool runs through the MCP handler under the verified principal: one
         # implementation of RBAC, validation, projection, Four-Eyes, and audit.
         from src.mcp_server import server as mcp_handlers
-        res, error = None, None
+        res: dict[str, Any] | None = None
+        error: str | None = None
         try:
             res = call_as(session_token, getattr(mcp_handlers, tool_choice), **args_dict)
         except Exception:
@@ -373,8 +377,8 @@ with tab1:
         if res is not None and res.get("decision") == "BLOCK":
             error = res.get("error", "Blocked")
 
-        if error:
-            st.error(f"🚫 **Action Blocked:** {error}")
+        if error or res is None:
+            st.error(f"🚫 **Action Blocked:** {error or 'no result'}")
         elif tool_choice in ("request_account_freeze", "request_fee_refund"):
             label = ("🔶 **Approval Gate Created!** Requires Compliance Officer Dual-Control"
                      if tool_choice == "request_account_freeze" else "🔶 **Refund Approval Created!**")
@@ -383,6 +387,7 @@ with tab1:
             st.info("💡 Copy this `approval_id` to approve it in **Tab 2** as `officer_eve`, or execute it with `execute_approved_action`.")
         else:
             # Raw view is fetched for this console only (tenant-scoped); it never reaches the LLM.
+            raw_view: Any
             if tool_choice == "get_account_profile":
                 raw_view = get_account(args_dict["account_id"], current_session.tenant_id)
             elif tool_choice == "query_transactions":

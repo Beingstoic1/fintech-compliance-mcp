@@ -13,6 +13,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from src.domain.policy import MAX_QUERY_LIMIT
+
 AccountId = Annotated[str, StringConstraints(strict=True, pattern=r"^ACC-[0-9]{3,12}$")]
 TransactionId = Annotated[str, StringConstraints(strict=True, pattern=r"^TXN-[A-Z0-9-]{1,40}$")]
 ApprovalId = Annotated[str, StringConstraints(
@@ -21,7 +23,7 @@ Reason = Annotated[str, StringConstraints(strict=True, min_length=3, max_length=
 DateBound = Annotated[str, StringConstraints(
     strict=True, pattern=r"^(|\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?)$")]
 IdempotencyKey = Annotated[str, StringConstraints(strict=True, pattern=r"^[A-Za-z0-9_-]{8,64}$")]
-QueryLimit = Annotated[int, Field(strict=True, ge=1, le=100)]
+QueryLimit = Annotated[int, Field(strict=True, ge=1, le=MAX_QUERY_LIMIT)]
 ThresholdCents = Annotated[int, Field(strict=True, ge=1, le=10**10)]
 AmountCents = Annotated[int, Field(strict=True, ge=1, le=10**12)]
 

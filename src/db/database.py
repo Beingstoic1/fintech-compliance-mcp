@@ -7,8 +7,14 @@ from __future__ import annotations
 import os
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, TypeVar
+
+from src.domain.policy import check_query_limit
+
+_T = TypeVar("_T")
 
 DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "fintech_ledger.db"
 # Override with FINTECH_DB_PATH (tests always point this at a temp file).
@@ -140,9 +146,9 @@ _NORMAL_MEMOS = [
     "Tax payment",
 ]
 
-def _build_normal_transactions() -> list[tuple]:
+def _build_normal_transactions() -> list[tuple[Any, ...]]:
     """Generate ~112 normal transactions to reach 120+ total (8 structuring + 1 injection + 112 normal)."""
-    rows: list[tuple] = []
+    rows: list[tuple[Any, ...]] = []
     # Distribute across all accounts and both tenants
     account_tenant = {a[0]: a[1] for a in _ACCOUNTS}
 
@@ -409,7 +415,7 @@ def require_tenant(tenant_id: str) -> str:
     return tenant_id
 
 
-def get_account(account_id: str, tenant_id: str) -> dict | None:
+def get_account(account_id: str, tenant_id: str) -> dict[str, Any] | None:
     require_tenant(tenant_id)
     with get_connection() as conn:
         row = conn.execute(
@@ -426,9 +432,9 @@ def get_transactions(
     limit: int = 50,
     *,
     tenant_id: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     sql = "SELECT * FROM transactions WHERE account_id=? AND tenant_id=?"
-    params: list = [account_id, require_tenant(tenant_id)]
+    params: list[Any] = [account_id, require_tenant(tenant_id)]
     if start_date:
         sql += " AND created_at >= ?"
         params.append(start_date)
@@ -436,13 +442,13 @@ def get_transactions(
         sql += " AND created_at <= ?"
         params.append(end_date)
     sql += " ORDER BY created_at DESC LIMIT ?"
-    params.append(limit)
+    params.append(check_query_limit(limit))  # defense in depth behind the tool boundary
     with get_connection() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_transaction(txn_id: str, tenant_id: str) -> dict | None:
+def get_transaction(txn_id: str, tenant_id: str) -> dict[str, Any] | None:
     """Tenant-scoped single transaction lookup. tenant_id is mandatory."""
     if not tenant_id:
         raise ValueError("tenant_id is required")
@@ -469,7 +475,7 @@ def get_refunded_total(txn_id: str, tenant_id: str) -> int:
         return _refunded_total(conn, txn_id, tenant_id)
 
 
-def _own_txn(fn, *args):
+def _own_txn(fn: Callable[..., _T], *args: Any) -> _T:
     """Run fn(conn, *args) in its own BEGIN IMMEDIATE transaction."""
     conn = get_connection()
     try:
@@ -531,7 +537,7 @@ def _refund(conn: sqlite3.Connection, txn_id: str, amount_cents: int, tenant_id:
             txn_type, status, memo, created_at, refund_of_txn_id)
            VALUES (?,?,?,NULL,?,?,'refund','completed',?,?,?)""",
         (new_txn_id, orig["tenant_id"], orig["account_id"], requested.to_minor(), currency,
-         f"Refund for {txn_id}", datetime.now(timezone.utc).isoformat(), txn_id),
+         f"Refund for {txn_id}", datetime.now(UTC).isoformat(), txn_id),
     )
     return new_txn_id
 
@@ -549,7 +555,7 @@ def refund_transaction(txn_id: str, amount_cents: int, tenant_id: str,
     return _own_txn(_refund, txn_id, amount_cents, tenant_id)
 
 
-def detect_structuring(tenant_id: str, threshold_cents: int = 999900) -> list[dict]:
+def detect_structuring(tenant_id: str, threshold_cents: int = 999900) -> list[dict[str, Any]]:
     """
     Detect smurfing: accounts sending >= 2 sub-threshold debits to the same
     merchant within any 48-hour window.

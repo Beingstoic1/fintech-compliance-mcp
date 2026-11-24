@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 ROLES: frozenset[str] = frozenset({"junior_analyst", "senior_investigator", "compliance_officer"})
 
@@ -30,6 +31,17 @@ RBAC_MATRIX: dict[str, frozenset[str]] = {
     # Not an MCP tool: human sign-off via the approval console (step-up auth required).
     "approve_action":               frozenset({"compliance_officer"}),
 }
+
+
+MAX_QUERY_LIMIT = 100
+
+
+def check_query_limit(limit: object) -> int:
+    """Page size for list reads: an int in 1..MAX_QUERY_LIMIT, never unbounded
+    (SQLite treats ``LIMIT -1`` as "all rows"). bool is rejected."""
+    if type(limit) is not int or not 1 <= limit <= MAX_QUERY_LIMIT:
+        raise ValueError("INVALID_LIMIT")
+    return limit
 
 
 def is_allowed(role: str, tool_name: str) -> bool:
@@ -172,8 +184,8 @@ PROJECTIONS: dict[str, dict[str, Any]] = {
 }
 
 
-def _project_one(record: dict, fields: dict[str, Any], role: str) -> dict:
-    out: dict = {}
+def _project_one(record: dict[str, Any], fields: dict[str, Any], role: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     for name, rule in fields.items():
         if name not in record:
             continue

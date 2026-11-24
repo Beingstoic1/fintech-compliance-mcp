@@ -4,14 +4,15 @@ The state graph from ``src.domain.approvals`` is enforced in SQL too:
   * ``status`` CHECK constraint; ``tenant_id NOT NULL``; approver != requester CHECK;
   * ``UNIQUE(tenant_id, requester_sub, idempotency_key)`` for idempotent staging;
   * triggers abort any UPDATE that is not a legal transition, touches an immutable
-    column, or modifies a terminal row.
+    column, or modifies a terminal row, and any INSERT that is not a fresh PENDING row.
 All mutating helpers take the caller's connection so a transition, the business
 action, and its audit row commit (or roll back) together.
 """
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 _COLUMNS_DDL = """
     approval_id               TEXT PRIMARY KEY,
@@ -45,6 +46,13 @@ _IMMUTABLE = ("approval_id", "tenant_id", "requester_sub", "requester_role", "to
               "canonical_args_json", "key_id", "args_digest", "idempotency_key",
               "created_at", "expires_at")
 
+# Columns a transition may set, in addition to status.
+_SETTABLE = frozenset({"approver_sub", "approved_at", "approved_amr", "rejected_by_sub",
+                       "rejected_at", "rejection_reason", "executed_by_sub", "consumed_at",
+                       "execution_idempotency_key", "execution_result_json"})
+
+_NEW_DECISION_COLS = ", ".join(f"NEW.{c}" for c in sorted(_SETTABLE))
+
 _TRIGGERS = f"""
 CREATE TRIGGER IF NOT EXISTS trg_pending_approvals_transition
 BEFORE UPDATE ON pending_approvals
@@ -63,14 +71,24 @@ BEGIN
     SELECT RAISE(ABORT, 'APPROVAL_ROW_IMMUTABLE');
 END;
 
+-- A row is born PENDING with no decision columns, and never over an existing row:
+-- blocks forging an APPROVED row (copying a valid binding) and INSERT OR REPLACE,
+-- whose implicit delete skips UPDATE triggers.
+CREATE TRIGGER IF NOT EXISTS trg_pending_approvals_insert
+BEFORE INSERT ON pending_approvals
+WHEN NEW.status IS NOT 'PENDING'
+    OR COALESCE({_NEW_DECISION_COLS}) IS NOT NULL
+    OR EXISTS (SELECT 1 FROM pending_approvals WHERE approval_id = NEW.approval_id)
+    OR (NEW.idempotency_key IS NOT NULL AND EXISTS (
+        SELECT 1 FROM pending_approvals WHERE tenant_id = NEW.tenant_id
+            AND requester_sub = NEW.requester_sub AND idempotency_key = NEW.idempotency_key))
+BEGIN
+    SELECT RAISE(ABORT, 'ILLEGAL_APPROVAL_INSERT');
+END;
+
 CREATE INDEX IF NOT EXISTS idx_pending_approvals_tenant_status
     ON pending_approvals (tenant_id, status, expires_at);
 """
-
-# Columns a transition may set, in addition to status.
-_SETTABLE = frozenset({"approver_sub", "approved_at", "approved_amr", "rejected_by_sub",
-                       "rejected_at", "rejection_reason", "executed_by_sub", "consumed_at",
-                       "execution_idempotency_key", "execution_result_json"})
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
@@ -109,7 +127,7 @@ def _migrate_legacy(conn: sqlite3.Connection) -> None:
 
 # ─── reads ──────────────────────────────────────────────────────────────────
 
-def get(conn: sqlite3.Connection, approval_id: str, tenant_id: str) -> dict | None:
+def get(conn: sqlite3.Connection, approval_id: str, tenant_id: str) -> dict[str, Any] | None:
     """Tenant-scoped (T10): another tenant's approval is indistinguishable from a
     missing one, matching what Postgres RLS returns."""
     if not tenant_id:
@@ -120,7 +138,7 @@ def get(conn: sqlite3.Connection, approval_id: str, tenant_id: str) -> dict | No
 
 
 def find_by_idempotency(conn: sqlite3.Connection, tenant_id: str, requester_sub: str,
-                        idempotency_key: str) -> dict | None:
+                        idempotency_key: str) -> dict[str, Any] | None:
     row = conn.execute(
         """SELECT * FROM pending_approvals
            WHERE tenant_id=? AND requester_sub=? AND idempotency_key=?""",
@@ -130,7 +148,7 @@ def find_by_idempotency(conn: sqlite3.Connection, tenant_id: str, requester_sub:
 
 
 def list_for_tenant(conn: sqlite3.Connection, tenant_id: str,
-                    statuses: Iterable[str] = ("PENDING", "APPROVED")) -> list[dict]:
+                    statuses: Iterable[str] = ("PENDING", "APPROVED")) -> list[dict[str, Any]]:
     statuses = tuple(statuses)
     ph = ",".join("?" for _ in statuses)
     rows = conn.execute(
