@@ -1,4 +1,12 @@
-"""Outbound ports. Adapters (fake, Stripe test mode) implement these in T25."""
+"""Outbound ports. Adapters (fake, Stripe test mode) implement these in T25.
+
+Threat model:
+  * Live-money mistakes: ``require_test_mode_key`` refuses any key that does not start
+    with ``sk_test_`` (live, restricted, publishable, padded or empty keys).
+  * Leaking provider data: adapters raise ``GatewayError(code, http_status)`` only, never
+    the provider body or the key.
+  * Not wired: no port is called from the Four-Eyes execute path yet.
+"""
 from __future__ import annotations
 
 from typing import NamedTuple, Protocol
@@ -7,6 +15,7 @@ from src.domain.money import Money
 
 
 class GatewayRefund(NamedTuple):
+    """Provider reference and status of a refund the gateway accepted."""
     provider_ref: str
     status: str
 
@@ -17,6 +26,7 @@ class PaymentsGateway(Protocol):
     name: str
 
     def refund(self, *, original_ref: str, amount: Money, idempotency_key: str) -> GatewayRefund:
+        """Refund ``amount`` of ``original_ref`` once per ``idempotency_key``."""
         ...
 
 
@@ -31,7 +41,7 @@ class GatewayError(RuntimeError):
 
 
 class LiveKeyRefused(ValueError):
-    pass
+    """A non-test payments key was supplied."""
 
 
 def require_test_mode_key(key: str) -> str:

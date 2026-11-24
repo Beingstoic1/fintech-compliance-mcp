@@ -17,6 +17,14 @@ What each layer buys (and what it does not):
 
 v1 rows (unkeyed) are preserved read-only in ``audit_logs_legacy_v1``; the v2 chain's
 genesis is anchored to the v1 head (``LEGACY-V1:<hash>``).
+
+Threat model (summary):
+  * In scope: in-app UPDATE/DELETE/REPLACE of history, re-chaining without the key,
+    tail truncation, forged checkpoints, and PII in ``detail``.
+  * Out of scope: an attacker holding the audit key and write access to the checkpoint
+    store. That needs a KMS/HSM key and WORM storage, neither of which is wired here.
+  * Crash window: checkpoints are written after commit, so the newest row may be
+    uncovered until the next write.
 """
 from __future__ import annotations
 
@@ -94,6 +102,7 @@ TRIGGER_NAMES = tuple(f"trg_{t}_{op}" for t in _APPEND_ONLY_TABLES for op, _ in 
 
 
 def install_triggers(conn: sqlite3.Connection) -> None:
+    """Create the append-only and no-overwrite triggers on every ledger table that exists."""
     existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     for table in _APPEND_ONLY_TABLES:
         if table not in existing:
@@ -183,6 +192,7 @@ class FileCheckpointStore:
         self.path = Path(path)
 
     def append(self, record: dict[str, Any]) -> None:
+        """Append one signed checkpoint line under an exclusive lock, then fsync."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
         with open(self.path, "a", encoding="utf-8") as fh:
@@ -193,6 +203,7 @@ class FileCheckpointStore:
             os.fsync(fh.fileno())
 
     def latest(self) -> dict[str, Any] | None:
+        """Checkpoint with the highest ``event_id``; junk lines are skipped, not trusted."""
         try:
             with open(self.path, encoding="utf-8") as fh:
                 if fcntl:
@@ -219,10 +230,12 @@ _CHECKPOINT_EVERY = int(os.environ.get("FINTECH_AUDIT_CHECKPOINT_EVERY", "1"))
 
 
 def get_checkpoint_store() -> CheckpointStore:
+    """The process-wide checkpoint store (file store unless replaced)."""
     return _store
 
 
 def set_checkpoint_store(store: CheckpointStore) -> None:
+    """Swap the checkpoint store (tests; a WORM adapter in production)."""
     global _store
     _store = store
 
@@ -333,6 +346,7 @@ _OUTCOME: ContextVar[AuditOutcome | None] = ContextVar("audit_outcome", default=
 
 @contextmanager
 def observe_outcome() -> Iterator[AuditOutcome]:
+    """Capture the decision and code of audit rows written in this scope (telemetry reads it)."""
     slot = AuditOutcome()
     token = _OUTCOME.set(slot)
     try:

@@ -10,6 +10,17 @@ in ``AuditedMCPServer.call_tool`` and recorded there: one BLOCK audit row
 (``SDK_ARGS_REJECTED``, keyed args digest, real caller when authenticated) plus a
 telemetry record. Calls to unknown tool names are not recorded: the name is caller
 text and has no place in either store (the SDK logs and rejects them).
+
+Threat model (whole server):
+  * Trust boundary: the MCP client and the LLM behind it are untrusted. Identity,
+    role and tenant come only from the transport; tool arguments are data.
+  * What reaches the LLM vendor: tool descriptions (``_MODEL_FACING``), schemas, and
+    role-projected results. Raw DB rows, keys, tokens, audit rows and approval
+    bindings never do.
+  * Mutations: tools only stage approvals or execute ones a human approved; there is
+    no tool that approves.
+  * Not covered here: rate limiting (belongs at the transport/gateway) and TLS
+    termination (the HTTP server binds 127.0.0.1 by default).
 """
 import os
 import sys
@@ -100,6 +111,34 @@ mcp = AuditedMCPServer(
 )
 
 
+# What the LLM sees in ``tools/list``. Kept apart from the handler docstrings so the
+# maintainer-facing threat-model notes below are never sent to the model vendor.
+_MODEL_FACING: dict[str, str] = {
+    "get_account_profile": "Get an account profile in the caller's tenant. Fields are projected per role.",
+    "query_transactions": (
+        "Query an account's transactions (caller's tenant only). Memos are returned as untrusted text."
+    ),
+    "detect_structuring_anomalies": "Detect sub-threshold structuring / smurfing rings in the caller's tenant.",
+    "request_account_freeze": (
+        "senior_investigator only. Stages a 15-minute Four-Eyes approval for an account freeze.\n"
+        "Pass an idempotency_key to make retries safe (same key + same args -> same approval_id)."
+    ),
+    "request_fee_refund": (
+        "senior_investigator only. Stages a 15-minute Four-Eyes approval for a fee refund\n"
+        "(amount in minor units; must not exceed the transaction's refundable balance)."
+    ),
+    "execute_approved_action": (
+        "\ncompliance_officer only. Executes an action a human officer has already APPROVED\n"
+        "(step-up sign-off happens in the approval console, never through this server).\n"
+        "Consume + action + audit commit atomically; a retry with the same idempotency_key\n"
+        "returns the original result.\n"
+    ),
+    "reject_approved_action": (
+        "compliance_officer only. Rejects a PENDING or APPROVED request (fail-safe direction)."
+    ),
+}
+
+
 def _guard(tool_name: str, raw_args: dict[str, Any]) -> tuple[Principal, Any, str] | dict[str, Any]:
     """Authenticate, authorize, and strictly validate. Returns a BLOCK dict on failure."""
     try:
@@ -126,10 +165,20 @@ def _block(p: Principal, tool_name: str, args_digest: str, code: str, message: s
     return {"error": message, "decision": "BLOCK"}
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["get_account_profile"])
 @instrument_tool
 def get_account_profile(account_id: AccountId) -> dict[str, Any]:
-    """Get an account profile in the caller's tenant. Fields are projected per role."""
+    """Return one account from the caller's tenant, projected for the caller's role.
+
+    Threat model:
+      * Cross-tenant read: the DAL filters on the JWT tenant, so another tenant's account
+        gets the same ``NOT_FOUND`` as a missing one (no existence oracle).
+      * Disclosure to the LLM vendor: ``post_process`` keeps only allowlisted fields;
+        junior analysts get initials, ``****last4`` and a masked tax ID.
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
+    """
     tool_name = "get_account_profile"
     g = _guard(tool_name, {"account_id": account_id})
     if isinstance(g, dict):
@@ -145,11 +194,24 @@ def get_account_profile(account_id: AccountId) -> dict[str, Any]:
     return result
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["query_transactions"])
 @instrument_tool
 def query_transactions(account_id: AccountId, start_date: DateBound = "",
                        end_date: DateBound = "", limit: QueryLimit = 50) -> dict[str, Any]:
-    """Query an account's transactions (caller's tenant only). Memos are returned as untrusted text."""
+    """Return up to ``limit`` transactions for an account in the caller's tenant.
+
+    Threat model:
+      * Cross-tenant read: account ownership is checked first and rows are filtered by
+        tenant in SQL.
+      * Unbounded read: ``limit`` is 1..100 in the advertised schema, the handler model,
+        and again in the DAL (``check_query_limit``).
+      * Prompt injection: ``memo`` is counterparty text, returned verbatim inside an
+        ``untrusted_text`` envelope. Signals are detection only; the defence is that this
+        tool cannot mutate anything and every mutation needs a human approver.
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
+    """
     tool_name = "query_transactions"
     g = _guard(tool_name, {"account_id": account_id, "start_date": start_date,
                            "end_date": end_date, "limit": limit})
@@ -167,10 +229,19 @@ def query_transactions(account_id: AccountId, start_date: DateBound = "",
     return result
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["detect_structuring_anomalies"])
 @instrument_tool
 def detect_structuring_anomalies(threshold_cents: ThresholdCents = 999900) -> dict[str, Any]:
-    """Detect sub-threshold structuring / smurfing rings in the caller's tenant."""
+    """Find sub-threshold transfer rings in the caller's tenant (read-only).
+
+    Threat model:
+      * Tenant scope: there is no tenant parameter; the scope is the JWT tenant.
+      * Input abuse: ``threshold_cents`` is a bounded strict integer.
+      * Disclosure: results go through the same per-role projection as other reads.
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
+    """
     tool_name = "detect_structuring_anomalies"
     g = _guard(tool_name, {"threshold_cents": threshold_cents})
     if isinstance(g, dict):
@@ -186,12 +257,25 @@ def detect_structuring_anomalies(threshold_cents: ThresholdCents = 999900) -> di
 _ACTION_FIELDS = {"idempotency_key"}  # transport concerns, not part of the bound action
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["request_account_freeze"])
 @instrument_tool
 def request_account_freeze(account_id: AccountId, reason: Reason,
                            idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
-    """senior_investigator only. Stages a 15-minute Four-Eyes approval for an account freeze.
-    Pass an idempotency_key to make retries safe (same key + same args -> same approval_id)."""
+    """Stage a PENDING freeze approval; never freezes anything itself.
+
+    Threat model:
+      * Excessive agency: the agent can only propose. The approval is bound by
+        ``HMAC(key, {tool, args, requester, tenant})`` and lives 15 minutes.
+      * RBAC: senior_investigator only; any other role gets an audited ``RBAC_BLOCK``.
+      * Cross-tenant target: the account must exist in the caller's tenant.
+      * Retries: ``idempotency_key`` is namespaced per tenant and requester; the same key
+        with different args returns ``IDEMPOTENCY_KEY_REUSED``.
+      * ``reason`` is stored in the approval row for the human reviewer, not in the audit
+        ledger.
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
+    """
     tool_name = "request_account_freeze"
     g = _guard(tool_name, {"account_id": account_id, "reason": reason,
                            "idempotency_key": idempotency_key})
@@ -201,12 +285,23 @@ def request_account_freeze(account_id: AccountId, reason: Reason,
     return four_eyes.stage_freeze(p, args.model_dump(exclude=_ACTION_FIELDS), h, args.idempotency_key)
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["request_fee_refund"])
 @instrument_tool
 def request_fee_refund(transaction_id: TransactionId, amount_cents: AmountCents, reason: Reason,
                        idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
-    """senior_investigator only. Stages a 15-minute Four-Eyes approval for a fee refund
-    (amount in minor units; must not exceed the transaction's refundable balance)."""
+    """Stage a PENDING refund approval; never moves money itself.
+
+    Threat model:
+      * Amount abuse: ``amount_cents`` is a strict int (bool and float refused), then
+        ``check_refund`` refuses zero/negative, over-refund, refund-of-refund and
+        currency mismatch. The rule runs again at execute time inside ``BEGIN IMMEDIATE``.
+      * Cross-tenant target: the transaction is looked up in the caller's tenant only.
+      * Same staging guarantees as ``request_account_freeze`` (HMAC binding, TTL, RBAC,
+        idempotency).
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
+    """
     tool_name = "request_fee_refund"
     g = _guard(tool_name, {"transaction_id": transaction_id, "amount_cents": amount_cents,
                            "reason": reason, "idempotency_key": idempotency_key})
@@ -216,15 +311,26 @@ def request_fee_refund(transaction_id: TransactionId, amount_cents: AmountCents,
     return four_eyes.stage_refund(p, args.model_dump(exclude=_ACTION_FIELDS), h, args.idempotency_key)
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["execute_approved_action"])
 @instrument_tool
 def execute_approved_action(approval_id: ApprovalId,
                             idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
-    """
-    compliance_officer only. Executes an action a human officer has already APPROVED
-    (step-up sign-off happens in the approval console, never through this server).
-    Consume + action + audit commit atomically; a retry with the same idempotency_key
-    returns the original result.
+    """Run an action a human officer already APPROVED, exactly once.
+
+    Threat model:
+      * Agent self-approval: APPROVED is reachable only through the human console's
+        ``approve()`` with step-up ``amr``. MCP tokens carry ``amr=pwd`` and there is no
+        approve tool.
+      * Replay and double-execute: a compare-and-swap (``status='APPROVED' AND
+        expires_at > now``) consumes the approval in the same ``BEGIN IMMEDIATE``
+        transaction as the action and its audit row; losers get ``ALREADY_*`` or
+        ``STATE_CHANGED_OR_EXPIRED``.
+      * Argument swap: the HMAC binding is re-verified with the stored ``key_id``.
+      * Cross-tenant: the approval lookup is tenant-scoped (``NOT_FOUND``).
+      * A failed action rolls back the consume, so the approval is not burned.
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
     """
     tool_name = "execute_approved_action"
     g = _guard(tool_name, {"approval_id": approval_id, "idempotency_key": idempotency_key})
@@ -234,10 +340,21 @@ def execute_approved_action(approval_id: ApprovalId,
     return four_eyes.execute(p, args.approval_id, h, args.idempotency_key)
 
 
-@mcp.tool()
+@mcp.tool(description=_MODEL_FACING["reject_approved_action"])
 @instrument_tool
 def reject_approved_action(approval_id: ApprovalId, reason: Reason) -> dict[str, Any]:
-    """compliance_officer only. Rejects a PENDING or APPROVED request (fail-safe direction)."""
+    """Reject a PENDING or APPROVED request (the fail-safe direction).
+
+    Threat model:
+      * Resurrection: only PENDING/APPROVED -> REJECTED is allowed; SQL triggers freeze
+        terminal rows.
+      * Cross-tenant: the approval lookup is tenant-scoped (``NOT_FOUND``).
+      * RBAC: compliance_officer only. ``reason`` is stored on the approval row, not in
+        the audit ledger.
+    Common to every tool: identity comes from the verified bearer JWT (``_guard`` ->
+    ``pre_check``), never from arguments; arguments are strictly re-validated; every
+    outcome writes one audit row holding a keyed args digest, never raw args.
+    """
     tool_name = "reject_approved_action"
     g = _guard(tool_name, {"approval_id": approval_id, "reason": reason})
     if isinstance(g, dict):
@@ -247,6 +364,7 @@ def reject_approved_action(approval_id: ApprovalId, reason: Reason) -> dict[str,
 
 
 def main() -> None:
+    """Start on stdio (one operator-bound identity) or Streamable-HTTP (per-request JWT)."""
     transport = os.environ.get("FINTECH_MCP_TRANSPORT", "stdio")
     if transport == "stdio":
         # stdio has no per-request auth: the operator binds one identity at launch.

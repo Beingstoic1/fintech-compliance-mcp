@@ -1,6 +1,12 @@
 """Decimal money value object. Floats are rejected everywhere.
 
 Storage keeps integer minor units (paise/cents); the domain reasons in ``Money``.
+
+Threat model:
+  * Rounding and precision loss: floats and bools are refused; amounts below the
+    currency's minor unit are refused instead of rounded.
+  * Currency confusion: arithmetic and comparison across currencies raise.
+  * Unknown currencies: only ``CURRENCY_EXPONENT`` codes are accepted.
 """
 from __future__ import annotations
 
@@ -12,11 +18,12 @@ CURRENCY_EXPONENT: dict[str, int] = {"INR": 2, "USD": 2, "EUR": 2, "GBP": 2, "SG
 
 
 class MoneyError(ValueError):
-    pass
+    """A money rule was broken. The message is a stable code."""
 
 
 @dataclass(frozen=True)
 class Money:
+    """An exact amount in one currency. Construct from ``Decimal`` or ``from_minor``; never float."""
     amount: Decimal
     currency: str
 
@@ -34,6 +41,7 @@ class Money:
     # ── construction / conversion ────────────────────────────────────────────
     @classmethod
     def from_minor(cls, minor: object, currency: str) -> Money:
+        """Build from integer minor units (paise, cents)."""
         if isinstance(minor, bool) or not isinstance(minor, int):
             raise MoneyError("MINOR_UNITS_MUST_BE_INT")
         exp = CURRENCY_EXPONENT.get(currency)
@@ -43,9 +51,11 @@ class Money:
 
     @classmethod
     def zero(cls, currency: str) -> Money:
+        """Zero in ``currency``."""
         return cls.from_minor(0, currency)
 
     def to_minor(self) -> int:
+        """Integer minor units for storage."""
         return int(self.amount.scaleb(CURRENCY_EXPONENT[self.currency]))
 
     # ── arithmetic (same currency only) ──────────────────────────────────────
@@ -80,4 +90,5 @@ class Money:
         return self.amount >= other.amount
 
     def is_positive(self) -> bool:
+        """True when the amount is greater than zero."""
         return self.amount > 0

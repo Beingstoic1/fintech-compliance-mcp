@@ -7,6 +7,17 @@ Lifecycle:
     PENDING|APPROVED --TTL elapsed-------------------------------> EXPIRED
 CONSUMED / REJECTED / EXPIRED are terminal. The same graph is enforced again by
 SQLite triggers in ``src.db.approvals`` (defense in depth).
+
+Threat model:
+  * Agent self-approval: APPROVED needs a compliance officer who is not the requester,
+    in the same tenant, holding a step-up ``amr`` (``STEP_UP_AMR``). Agent JWTs carry
+    ``amr=pwd``, so ``check_approve`` always denies them.
+  * Cross-tenant use: ``tenant_matches`` fails closed on NULL / empty / mismatched tenants.
+  * Replay and resurrection: terminal states have no outgoing edges.
+  * Expiry race: verdicts use the caller's clock; storage re-checks ``expires_at`` in the
+    SQL compare-and-swap, so a stale read cannot consume an expired approval.
+  * Not covered: proving who the officer is. ``amr`` is asserted by the IdP; the dev
+    Workbench simulates step-up.
 """
 from __future__ import annotations
 
@@ -39,6 +50,7 @@ OFFICER = "compliance_officer"
 
 
 def utc_now() -> datetime:
+    """Current UTC time (services accept ``now=`` so tests can freeze it)."""
     return datetime.now(UTC)
 
 
@@ -48,6 +60,7 @@ def to_iso(ts: datetime) -> str:
 
 
 def can_transition(src: str, dst: str) -> bool:
+    """True when ``src -> dst`` is an edge of the approval state graph."""
     return dst in TRANSITIONS.get(src, frozenset())
 
 
@@ -57,11 +70,13 @@ def tenant_matches(approval_tenant: str | None, principal_tenant: str) -> bool:
 
 
 def is_expired(expires_at_iso: str, now: datetime) -> bool:
+    """True when ``now`` is at or past the approval's ``expires_at``."""
     return datetime.fromisoformat(expires_at_iso) <= now
 
 
 @dataclass(frozen=True)
 class Verdict:
+    """Result of a domain check: ``ok`` plus a stable ``code`` and a user-safe ``message``."""
     ok: bool
     code: str = "OK"
     message: str = ""
@@ -69,6 +84,7 @@ class Verdict:
 
     @staticmethod
     def deny(code: str, message: str) -> Verdict:
+        """Build a failing ``Verdict`` whose message starts with the code."""
         return Verdict(False, code, f"{code}: {message}")
 
 
@@ -126,6 +142,7 @@ def check_execute(approval: Mapping[str, Any], *, sub: str, role: str, tenant_id
 
 
 def check_reject(approval: Mapping[str, Any], *, role: str, tenant_id: str) -> Verdict:
+    """Compliance officer only, same tenant, and only from PENDING or APPROVED."""
     if role != OFFICER:
         return Verdict.deny("RBAC_BLOCK", "only a compliance_officer may reject")
     if not tenant_matches(approval.get("tenant_id"), tenant_id):

@@ -10,6 +10,13 @@ Latency is kept as integer microseconds and reported as ``Decimal`` milliseconds
 so every aggregate is exact. Percentiles use the nearest-rank method (p50 is the
 lower median for an even count), which never interpolates a value that was not
 observed.
+
+Threat model:
+  * Side channel: telemetry cannot carry arguments, identities, tokens or free text,
+    because those fields do not exist and codes must match fixed patterns.
+  * Rounding drift: integer microseconds and ``Decimal`` output, no floats.
+  * Not covered: telemetry is operational data, not evidence. It has no HMAC and no
+    tenant column, and an unauthenticated caller can add ``unknown`` BLOCK records.
 """
 from __future__ import annotations
 
@@ -39,11 +46,12 @@ _US_PER_S = Decimal(1_000_000)
 
 
 class TelemetryError(ValueError):
-    pass
+    """A telemetry value has the wrong shape (for example a bad tool name)."""
 
 
 @dataclass(frozen=True)
 class ToolCallRecord:
+    """One tool call: name, audited decision, reason code, latency in µs. Nothing else."""
     tool: str
     decision: str
     reason_code: str | None
@@ -51,6 +59,7 @@ class ToolCallRecord:
 
     @property
     def latency_ms(self) -> Decimal:
+        """Latency in milliseconds as ``Decimal``."""
         return us_to_ms(self.latency_us)
 
 
@@ -85,6 +94,7 @@ def make_record(*, tool: str, decision: str | None, reason_code: object, elapsed
 
 
 def us_to_ms(us: int) -> Decimal:
+    """Exact conversion from integer µs to ``Decimal`` ms."""
     return Decimal(_int(us, "INVALID_LATENCY")) / _US_PER_MS
 
 
@@ -103,6 +113,7 @@ def nearest_rank(values: Sequence[int], pct: int) -> int | None:
 
 @dataclass(frozen=True)
 class LatencySummary:
+    """Call count and nearest-rank p50/p95 latency for one tool."""
     tool: str
     calls: int
     p50_ms: Decimal
@@ -110,6 +121,7 @@ class LatencySummary:
 
 
 def latency_by_tool(records: Iterable[ToolCallRecord]) -> list[LatencySummary]:
+    """p50/p95 latency per tool, sorted by tool name."""
     by_tool: dict[str, list[int]] = {}
     for r in records:
         by_tool.setdefault(r.tool, []).append(r.latency_us)
@@ -130,6 +142,7 @@ def blocked_by_reason(records: Iterable[ToolCallRecord]) -> list[tuple[str, int]
 
 @dataclass(frozen=True)
 class TurnaroundSummary:
+    """Count and median/p95 Four-Eyes turnaround in seconds."""
     count: int
     median_s: Decimal
     p95_s: Decimal

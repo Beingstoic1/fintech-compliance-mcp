@@ -7,6 +7,15 @@ No I/O and no keys: ``src.db.audit`` applies the HMAC over the bytes built here.
 * ``detail`` is never free text: it is a machine code (``^[A-Z][A-Z_]{1,63}$``, no
   digits, so a PAN, phone number or ``str(e)`` cannot fit) plus a small allowlist of
   typed references. Anything else is replaced with ``INVALID_DETAIL``.
+
+Threat model:
+  * PII or secrets in evidence: ``normalize_detail`` turns any free text into
+    ``INVALID_DETAIL``.
+  * Preimage confusion: canonical JSON with explicit keys, so two different rows cannot
+    produce the same bytes.
+  * Signature reuse: checkpoint preimages carry a ``purpose`` tag, so an entry HMAC cannot
+    be replayed as a checkpoint signature.
+  * Not covered here: key custody (``src.security.keys``) and storage (``src.db.audit``).
 """
 from __future__ import annotations
 
@@ -45,6 +54,7 @@ REF_VALIDATORS: dict[str, Callable[[Any], bool]] = {
 
 
 def canonical(obj: Any) -> bytes:
+    """Canonical JSON bytes: sorted keys, no whitespace, ASCII only."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
                       allow_nan=False).encode()
 
@@ -67,6 +77,7 @@ def normalize_detail(detail: str | Mapping[str, Any] | None) -> str | None:
 def entry_preimage(*, event_id: int, prev_hash: str, timestamp_utc: str, session_sub: str,
                    actor_role: str, tenant_id: str, tool_name: str, args_digest: str,
                    decision: str, detail: str | None, key_id: str) -> bytes:
+    """Bytes the audit HMAC covers for one row (v2: includes ``event_id``, ``prev`` and ``kid``)."""
     return canonical({
         "v": CHAIN_VERSION, "event_id": event_id, "prev": prev_hash, "ts": timestamp_utc,
         "sub": session_sub, "role": actor_role, "tenant": tenant_id, "tool": tool_name,

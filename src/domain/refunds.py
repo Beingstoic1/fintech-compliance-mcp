@@ -1,4 +1,12 @@
-"""Pure refund rules over ``Money``. No I/O; callers supply facts from storage."""
+"""Pure refund rules over ``Money``. No I/O; callers supply facts from storage.
+
+Threat model:
+  * Amount abuse: zero, negative, float and bool amounts, over-refund (cumulative
+    refunds above the original), refund-of-a-refund, and currency mixing are refused
+    with a stable code that is safe to return and log.
+  * Not covered: stale facts. The rule is only as current as the refunded total the
+    caller passes in; the DAL re-runs it inside ``BEGIN IMMEDIATE`` at execute time.
+"""
 from __future__ import annotations
 
 from src.domain.money import Money, MoneyError

@@ -9,6 +9,14 @@ that forgets the context manager sees zero rows (the policies compare against NU
 Works with any DB-API-like connection exposing psycopg 3's ``transaction()`` and
 ``info.transaction_status``; psycopg is not imported here (optional dependency:
 ``pip install '.[postgres]'``).
+
+Threat model:
+  * Tenant bleed on pooled connections: the setting is transaction-local and nesting is
+    refused, so one request's tenant cannot leak into the next.
+  * Injection into the setting: the tenant must match ``^[a-z0-9_]{3,64}$`` and is passed
+    as a bound parameter.
+  * Not covered: the connection must log in as a member of ``fintech_app``. Owners and
+    superusers bypass RLS.
 """
 from __future__ import annotations
 

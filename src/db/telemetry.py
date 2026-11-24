@@ -4,6 +4,12 @@
 hash chain and has no tenant, subject, argument or token column. CHECK constraints
 mirror the domain patterns, so the table refuses anything that is not a tool name,
 a known decision, or a code-shaped reason even if a caller skips the domain layer.
+
+Threat model:
+  * Side channel: a raw INSERT of free text, an unknown decision or a REAL latency is
+    refused by CHECK constraints, even when the domain layer is skipped.
+  * Not covered: no tamper evidence and no retention limit; the dashboard reads a
+    bounded window but the table grows.
 """
 from __future__ import annotations
 
@@ -17,6 +23,7 @@ from src.domain.telemetry import TERMINAL_STATUSES, ToolCallRecord
 def get_connection() -> sqlite3.Connection:
     # Imported per call: ``src.db.database`` runs ``init_db()`` at import time, which
     # creates this module's table, so a module-level import would be circular.
+    """Connection to the main ledger DB (imported lazily to avoid an import cycle)."""
     from src.db.database import get_connection as _get_connection
     return _get_connection()
 
@@ -42,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_tool_telemetry_tool ON tool_telemetry (tool_name)
 
 
 def init_telemetry_table(conn: sqlite3.Connection | None = None) -> None:
+    """Create ``tool_telemetry`` and its CHECK constraints if missing."""
     if conn is not None:
         conn.executescript(_DDL)
         return
@@ -50,6 +58,7 @@ def init_telemetry_table(conn: sqlite3.Connection | None = None) -> None:
 
 
 def insert_record(rec: ToolCallRecord) -> None:
+    """Store one already-sanitized ``ToolCallRecord``."""
     conn = get_connection()
     try:
         with conn:
@@ -64,6 +73,7 @@ def insert_record(rec: ToolCallRecord) -> None:
 
 
 def recent_records(limit: int = DEFAULT_WINDOW) -> list[ToolCallRecord]:
+    """The newest ``limit`` telemetry records (all tenants; the table has no tenant column)."""
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise ValueError("INVALID_LIMIT")
     conn = get_connection()
@@ -91,6 +101,7 @@ def approval_turnaround_pairs(tenant_id: str) -> list[tuple[str, str]]:
 
 
 def approval_status_counts(tenant_id: str) -> dict[str, int]:
+    """Approval counts by status for one tenant."""
     conn = get_connection()
     try:
         rows = conn.execute(

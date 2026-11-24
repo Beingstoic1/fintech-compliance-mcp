@@ -1,6 +1,19 @@
 """
 Fintech Compliance MCP – Database layer
 SQLite schema, seed data, and query helpers.
+
+Threat model:
+  * Cross-tenant access: every tenant-owned read and write takes a mandatory
+    ``tenant_id`` (``require_tenant``) and filters on it in SQL. SQLite has no RLS, so
+    this convention is the isolation boundary; ``tests/postgres/test_rls_static.py``
+    fails if a DAL function stops requiring it.
+  * Over-refund race: ``refund_transaction`` re-checks the refundable balance and inserts
+    under ``BEGIN IMMEDIATE`` and takes the currency from the original transaction.
+  * Unbounded reads: ``get_transactions`` re-checks ``limit`` behind the tool boundary.
+  * SQL injection: every value is a bound parameter.
+  * Not covered: anyone with access to the DB file bypasses all of this. The production
+    path is the Postgres RLS schema in ``src/db/postgres/`` (schema live-tested; this DAL
+    is not yet ported to it).
 """
 from __future__ import annotations
 
@@ -25,6 +38,7 @@ DB_PATH = Path(os.environ.get("FINTECH_DB_PATH") or DEFAULT_DB_PATH)
 # ---------------------------------------------------------------------------
 
 def get_connection() -> sqlite3.Connection:
+    """New SQLite connection to ``DB_PATH`` with WAL and foreign keys on."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -418,6 +432,7 @@ def require_tenant(tenant_id: str) -> str:
 
 
 def get_account(account_id: str, tenant_id: str) -> dict[str, Any] | None:
+    """One account, only if it belongs to ``tenant_id``."""
     require_tenant(tenant_id)
     with get_connection() as conn:
         row = conn.execute(
@@ -435,6 +450,7 @@ def get_transactions(
     *,
     tenant_id: str,
 ) -> list[dict[str, Any]]:
+    """An account's transactions in ``tenant_id``, newest first, at most ``MAX_QUERY_LIMIT`` rows."""
     sql = "SELECT * FROM transactions WHERE account_id=? AND tenant_id=?"
     params: list[Any] = [account_id, require_tenant(tenant_id)]
     if start_date:

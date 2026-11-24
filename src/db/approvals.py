@@ -7,6 +7,16 @@ The state graph from ``src.domain.approvals`` is enforced in SQL too:
     column, or modifies a terminal row, and any INSERT that is not a fresh PENDING row.
 All mutating helpers take the caller's connection so a transition, the business
 action, and its audit row commit (or roll back) together.
+
+Threat model:
+  * Forged approvals: an INSERT must be a fresh PENDING row with no decision columns,
+    never over an existing ``approval_id`` or idempotency triple.
+  * Resurrection and tampering: terminal rows are frozen, and bound columns (tool, args,
+    digest, requester, tenant) are immutable.
+  * Cross-tenant reads: every getter takes ``tenant_id``, so another tenant's approval
+    reads as missing (the same answer Postgres RLS gives).
+  * Not covered: SQLite still allows a raw DELETE of approval rows (tests rely on it);
+    the Postgres schema blocks it.
 """
 from __future__ import annotations
 
@@ -139,6 +149,7 @@ def get(conn: sqlite3.Connection, approval_id: str, tenant_id: str) -> dict[str,
 
 def find_by_idempotency(conn: sqlite3.Connection, tenant_id: str, requester_sub: str,
                         idempotency_key: str) -> dict[str, Any] | None:
+    """Earlier approval staged by this requester in this tenant with this key, if any."""
     row = conn.execute(
         """SELECT * FROM pending_approvals
            WHERE tenant_id=? AND requester_sub=? AND idempotency_key=?""",
@@ -149,6 +160,7 @@ def find_by_idempotency(conn: sqlite3.Connection, tenant_id: str, requester_sub:
 
 def list_for_tenant(conn: sqlite3.Connection, tenant_id: str,
                     statuses: Iterable[str] = ("PENDING", "APPROVED")) -> list[dict[str, Any]]:
+    """Approvals in ``statuses`` for one tenant, newest first. Never lists other tenants."""
     statuses = tuple(statuses)
     ph = ",".join("?" for _ in statuses)
     rows = conn.execute(
@@ -164,6 +176,7 @@ def insert(conn: sqlite3.Connection, *, approval_id: str, tenant_id: str, reques
            requester_role: str, tool_name: str, canonical_args_json: str, key_id: str,
            args_digest: str, created_at: str, expires_at: str,
            idempotency_key: str | None = None) -> None:
+    """Insert a fresh PENDING approval. Triggers refuse any other shape (``ILLEGAL_APPROVAL_INSERT``)."""
     conn.execute(
         """INSERT INTO pending_approvals
            (approval_id, tenant_id, requester_sub, requester_role, tool_name,
@@ -194,6 +207,7 @@ def transition(conn: sqlite3.Connection, approval_id: str, tenant_id: str,
 
 
 def expire_stale(conn: sqlite3.Connection, tenant_id: str, now_iso: str) -> int:
+    """Mark this tenant's PENDING/APPROVED rows past ``expires_at`` as EXPIRED. Returns the count."""
     return conn.execute(
         """UPDATE pending_approvals SET status='EXPIRED'
            WHERE tenant_id=? AND status IN ('PENDING','APPROVED') AND expires_at <= ?""",
