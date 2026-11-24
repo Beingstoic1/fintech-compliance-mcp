@@ -20,6 +20,16 @@ class PaymentsGateway(Protocol):
         ...
 
 
+class GatewayError(RuntimeError):
+    """A refused or failed gateway call. ``code`` is a fixed code, safe to log and audit;
+    provider response bodies are never carried."""
+
+    def __init__(self, code: str, *, http_status: int | None = None):
+        super().__init__(code)
+        self.code = code
+        self.http_status = http_status
+
+
 class LiveKeyRefused(ValueError):
     pass
 

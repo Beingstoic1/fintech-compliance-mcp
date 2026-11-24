@@ -355,6 +355,8 @@ def init_db() -> None:
         _migrate(conn)
         from src.db import approvals as approvals_repo  # local import: avoids an import cycle
         approvals_repo.init_schema(conn)
+        from src.db.telemetry import init_telemetry_table  # local import: same cycle
+        init_telemetry_table(conn)
 
         # Idempotency guard – skip seed if tenants table already has rows
         row = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()

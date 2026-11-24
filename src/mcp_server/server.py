@@ -3,9 +3,17 @@
 Identity is bound at the transport (T04): Streamable-HTTP bearer JWTs verified by
 ``JWTTokenVerifier``, or an operator-supplied token for stdio. No tool accepts a
 session token, user id, role, or tenant id as an argument.
+
+Telemetry (T23): every handler is wrapped by ``instrument_tool`` (latency, audited
+decision, reason code). Arguments the SDK rejects before a handler runs are caught
+in ``AuditedMCPServer.call_tool`` and recorded there: one BLOCK audit row
+(``SDK_ARGS_REJECTED``, keyed args digest, real caller when authenticated) plus a
+telemetry record. Calls to unknown tool names are not recorded: the name is caller
+text and has no place in either store (the SDK logs and rejects them).
 """
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +24,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from mcp.server.auth.settings import AuthSettings  # noqa: E402
 from mcp.server.mcpserver import MCPServer  # noqa: E402
+from mcp.server.mcpserver.context import Context  # noqa: E402
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError  # noqa: E402
+from mcp_types import CallToolResult, InputRequiredResult  # noqa: E402
 from pydantic import AnyHttpUrl, ValidationError  # noqa: E402
 
 from src.db.audit import log_event  # noqa: E402
 from src.db.database import detect_structuring, get_account, get_transactions  # noqa: E402
+from src.domain.telemetry import SDK_ARGS_REJECTED  # noqa: E402
 from src.mcp_server.schemas import (  # noqa: E402
     TOOL_INPUTS,
     AccountId,
@@ -34,12 +46,50 @@ from src.mcp_server.schemas import (  # noqa: E402
 )
 from src.security.binding import audit_digest  # noqa: E402
 from src.security.guardrails import post_process, pre_check  # noqa: E402
-from src.security.identity import ISSUER, JWTTokenVerifier, Principal, enable_stdio_identity  # noqa: E402
+from src.security.identity import (  # noqa: E402
+    ISSUER,
+    AuthenticationError,
+    JWTTokenVerifier,
+    Principal,
+    current_principal,
+    enable_stdio_identity,
+)
 from src.services import approvals as four_eyes  # noqa: E402
+from src.services.telemetry import instrument_tool, record_sdk_rejection  # noqa: E402
 
 RESOURCE_URL = os.environ.get("FINTECH_MCP_RESOURCE_URL", "http://localhost:8000/mcp")
 
-mcp = MCPServer(
+
+
+def _audit_sdk_rejection(tool_name: str, raw_args: dict[str, Any]) -> None:
+    """BLOCK row for arguments the SDK refused. Only a keyed digest of the args is kept."""
+    try:
+        p = current_principal()
+        sub, role, tenant = p.sub, p.role, p.tenant_id
+    except AuthenticationError:
+        sub = role = tenant = "unknown"
+    log_event(sub, role, tenant, tool_name, audit_digest(tool_name, raw_args, sub), "BLOCK", SDK_ARGS_REJECTED)
+
+
+class AuditedMCPServer(MCPServer[Any]):
+    """Closes the gap where SDK-level argument rejections left no audit or telemetry trace."""
+
+    async def call_tool(self, name: str, arguments: dict[str, Any],
+                        context: Context[Any, Any] | None = None) -> CallToolResult | InputRequiredResult:
+        start = time.perf_counter_ns()
+        try:
+            return await super().call_tool(name, arguments, context)
+        except ToolError as exc:
+            sdk_rejected = (not isinstance(exc, UnexpectedToolError)
+                            and isinstance(exc.__cause__, ValidationError)
+                            and name in TOOL_INPUTS)
+            if sdk_rejected:
+                _audit_sdk_rejection(name, arguments)
+                record_sdk_rejection(name, start)
+            raise
+
+
+mcp = AuditedMCPServer(
     "fintech-compliance",
     token_verifier=JWTTokenVerifier(),
     auth=AuthSettings(
@@ -77,6 +127,7 @@ def _block(p: Principal, tool_name: str, args_digest: str, code: str, message: s
 
 
 @mcp.tool()
+@instrument_tool
 def get_account_profile(account_id: AccountId) -> dict[str, Any]:
     """Get an account profile in the caller's tenant. Fields are projected per role."""
     tool_name = "get_account_profile"
@@ -95,6 +146,7 @@ def get_account_profile(account_id: AccountId) -> dict[str, Any]:
 
 
 @mcp.tool()
+@instrument_tool
 def query_transactions(account_id: AccountId, start_date: DateBound = "",
                        end_date: DateBound = "", limit: QueryLimit = 50) -> dict[str, Any]:
     """Query an account's transactions (caller's tenant only). Memos are returned as untrusted text."""
@@ -116,6 +168,7 @@ def query_transactions(account_id: AccountId, start_date: DateBound = "",
 
 
 @mcp.tool()
+@instrument_tool
 def detect_structuring_anomalies(threshold_cents: ThresholdCents = 999900) -> dict[str, Any]:
     """Detect sub-threshold structuring / smurfing rings in the caller's tenant."""
     tool_name = "detect_structuring_anomalies"
@@ -134,6 +187,7 @@ _ACTION_FIELDS = {"idempotency_key"}  # transport concerns, not part of the boun
 
 
 @mcp.tool()
+@instrument_tool
 def request_account_freeze(account_id: AccountId, reason: Reason,
                            idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
     """senior_investigator only. Stages a 15-minute Four-Eyes approval for an account freeze.
@@ -148,6 +202,7 @@ def request_account_freeze(account_id: AccountId, reason: Reason,
 
 
 @mcp.tool()
+@instrument_tool
 def request_fee_refund(transaction_id: TransactionId, amount_cents: AmountCents, reason: Reason,
                        idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
     """senior_investigator only. Stages a 15-minute Four-Eyes approval for a fee refund
@@ -162,6 +217,7 @@ def request_fee_refund(transaction_id: TransactionId, amount_cents: AmountCents,
 
 
 @mcp.tool()
+@instrument_tool
 def execute_approved_action(approval_id: ApprovalId,
                             idempotency_key: IdempotencyKey | None = None) -> dict[str, Any]:
     """
@@ -179,6 +235,7 @@ def execute_approved_action(approval_id: ApprovalId,
 
 
 @mcp.tool()
+@instrument_tool
 def reject_approved_action(approval_id: ApprovalId, reason: Reason) -> dict[str, Any]:
     """compliance_officer only. Rejects a PENDING or APPROVED request (fail-safe direction)."""
     tool_name = "reject_approved_action"

@@ -24,7 +24,10 @@ import json
 import logging
 import os
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -290,18 +293,52 @@ def _append(conn: sqlite3.Connection, session_sub: str, actor_role: str, tenant_
         if genesis is None:
             raise RuntimeError("audit ledger not initialised")
         event_id, prev_hash = 1, genesis
+    detail_json = normalize_detail(detail)
     row = {
         "event_id": event_id, "timestamp_utc": datetime.now(UTC).isoformat(timespec="microseconds"),
         "session_sub": session_sub, "actor_role": actor_role, "tenant_id": tenant_id,
         "tool_name": tool_name, "args_digest": args_digest, "decision": decision,
-        "detail": normalize_detail(detail), "key_id": _RING.active_kid, "prev_hash": prev_hash,
+        "detail": detail_json, "key_id": _RING.active_kid, "prev_hash": prev_hash,
     }
     row["entry_hash"] = _entry_hash(row)
     conn.execute(
         f"INSERT INTO audit_logs ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
         tuple(row.values()),
     )
+    slot = _OUTCOME.get()
+    if slot is not None:  # T23: hand the decision + code (never args/identity) to telemetry
+        slot.decision = decision
+        slot.code = str(json.loads(detail_json)["code"]) if detail_json else None
     return event_id
+
+
+# ---------------------------------------------------------------------------
+# Outcome observation (T23)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AuditOutcome:
+    """The last audit decision written in an ``observe_outcome()`` scope.
+
+    Only the decision and its normalized code are exposed; the last row wins, which
+    is the handler's final word (an aborted transaction re-audits its refusal after
+    rolling back).
+    """
+    decision: str | None = None
+    code: str | None = None
+
+
+_OUTCOME: ContextVar[AuditOutcome | None] = ContextVar("audit_outcome", default=None)
+
+
+@contextmanager
+def observe_outcome() -> Iterator[AuditOutcome]:
+    slot = AuditOutcome()
+    token = _OUTCOME.set(slot)
+    try:
+        yield slot
+    finally:
+        _OUTCOME.reset(token)
 
 
 def log_event(

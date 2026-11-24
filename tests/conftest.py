@@ -62,6 +62,7 @@ def clean_test_isolation():
             conn.execute("UPDATE accounts SET is_frozen=0")
             conn.execute("DELETE FROM transactions WHERE txn_id LIKE 'TXN-REF-%'")
             conn.execute("DELETE FROM transactions WHERE txn_id LIKE 'TXN-ADV-%'")  # adversarial fixtures
+            conn.execute("DELETE FROM tool_telemetry")  # T23: operational, not evidence
 
     def _harvest() -> None:
         conn = get_connection()
@@ -135,6 +136,13 @@ def principal():
         return TestPrincipal(token=token, sub=v.sub, role=v.role, tenant_id=v.tenant_id)
 
     return _make
+
+
+@pytest.fixture
+def fake_gateway():
+    """T25: a fresh in-memory ``PaymentsGateway`` (register charges with ``add_charge``)."""
+    from src.adapters.payments import FakePaymentsGateway
+    return FakePaymentsGateway()
 
 
 @pytest.fixture

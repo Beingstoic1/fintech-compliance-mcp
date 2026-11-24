@@ -223,11 +223,13 @@ def test_t13_query_limit_rejected_and_never_over_100_rows(principal, insert_txn,
     default = call_as(senior.token, server.query_transactions, "ACC-002")
     assert len(default["data"]) == 50
 
-    # (3) audit: every in-process rejection is a BLOCK with a code, for the real caller
+    # (3) audit: every rejection is a BLOCK with a code, for the real caller. In-process
+    # rejections are INVALID_INPUT; wire rejections (refused by the SDK before the handler
+    # runs) are SDK_ARGS_REJECTED since T23. No other BLOCK rows exist.
     blocked = [r for r in audit_rows("query_transactions") if r["decision"] == "BLOCK"]
-    assert len(blocked) == len(bad)
-    assert all(json.loads(r["detail"]) == {"code": "INVALID_INPUT"} and r["session_sub"] == senior.sub
-               for r in blocked)
+    codes = sorted(json.loads(r["detail"])["code"] for r in blocked)
+    assert codes == ["INVALID_INPUT"] * len(bad) + ["SDK_ARGS_REJECTED"] * len(bad)
+    assert all(r["session_sub"] == senior.sub and r["tenant_id"] == senior.tenant_id for r in blocked)
 
 
 # ─── T14: refund amounts (negative, zero, over original, cumulative) ─────────

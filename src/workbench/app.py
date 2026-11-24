@@ -226,6 +226,7 @@ try:
     from src.security.identity import authenticated, call_as, issue_demo_token, verify_jwt
     from src.security.session import DEMO_DIRECTORY
     from src.services import approvals as four_eyes
+    from src.services import telemetry as ops
     # Ensure directory and database are initialized
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     init_db()
@@ -291,10 +292,11 @@ with st.expander("⏱️ **60-Second Operational Runbook: 3 Clicks to Test All G
     </div>
     """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "🛡️ Agent & Guardrail Simulator",
     "👁️ Four-Eyes Approval Queue",
-    "🔐 Cryptographic Audit Ledger & Tamper Lab"
+    "🔐 Cryptographic Audit Ledger & Tamper Lab",
+    "📈 Operational Telemetry",
 ])
 
 # ─── TAB 1: GUARDRAIL SIMULATOR ───────────────────────────────────────────────
@@ -592,3 +594,56 @@ with tab3:
     with st.expander("🔎 View Full Cryptographic Payload"):
         if logs:
             st.dataframe(pd.DataFrame(logs), width="stretch")
+
+
+# ─── TAB 4: OPERATIONAL TELEMETRY (T24) ──────────────────────────────────────
+def _ms(v: Any) -> str:
+    return f"{v:.3f} ms"
+
+
+def _secs(v: Any) -> str:
+    return f"{v:.1f} s"
+
+
+with tab4:
+    st.header("📈 Operational Telemetry")
+    st.caption("Tool latency and block reasons come from `tool_telemetry`: tool name, audited decision, "
+               "reason code and latency only (no arguments, identities, PII or tokens), across all tenants. "
+               "Four-Eyes figures are scoped to the selected tenant.")
+
+    ops_tenant = st.selectbox("Tenant (Four-Eyes metrics)",
+                              sorted({t for _, t in DEMO_DIRECTORY.values()}), key="ops_tenant")
+    if st.button("🔄 Refresh Telemetry"):
+        st.rerun()
+    four_eyes.sweep_expired(ops_tenant)
+    dash = ops.dashboard(ops_tenant)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Tool Calls (window)", dash.window)
+    m2.metric("Blocked Actions", sum(n for _, n in dash.blocked))
+    if dash.turnaround:
+        m3.metric("Four-Eyes Turnaround p50", _secs(dash.turnaround.median_s))
+        m4.metric("Four-Eyes Turnaround p95", _secs(dash.turnaround.p95_s))
+    else:
+        m3.metric("Four-Eyes Turnaround p50", "n/a")
+        m4.metric("Four-Eyes Turnaround p95", "n/a")
+
+    st.metric("Approval Expiry Rate",
+              "n/a" if dash.expiry_rate is None else f"{dash.expiry_rate * 100:.1f} %",
+              help=f"EXPIRED / (CONSUMED + REJECTED + EXPIRED) over {dash.terminal_approvals} closed approvals")
+
+    c_lat, c_blk = st.columns(2)
+    with c_lat:
+        st.subheader("Tool Latency (p50 / p95)")
+        if dash.latency:
+            st.dataframe(pd.DataFrame([{"tool": s.tool, "calls": s.calls, "p50": _ms(s.p50_ms), "p95": _ms(s.p95_ms)}
+                                       for s in dash.latency]), width="stretch", hide_index=True)
+        else:
+            st.info("No tool calls recorded yet. Run tools in Tab 1.")
+    with c_blk:
+        st.subheader("Blocked Actions by Reason Code")
+        if dash.blocked:
+            st.dataframe(pd.DataFrame(dash.blocked, columns=["reason_code", "count"]),
+                         width="stretch", hide_index=True)
+        else:
+            st.info("No blocked actions recorded.")
