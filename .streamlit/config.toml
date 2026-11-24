@@ -1,0 +1,24 @@
+# Risk Workbench theme — mirrors the institutional slate tokens in docs/assets/site.css.
+[theme]
+base = "light"
+primaryColor = "#1e40af"              # --accent
+backgroundColor = "#f8fafc"           # --bg
+secondaryBackgroundColor = "#f1f5f9"  # --surface-2 (sidebar, inputs)
+textColor = "#0f172a"                 # --text
+linkColor = "#1e40af"
+borderColor = "#e2e8f0"               # --border
+dataframeBorderColor = "#e2e8f0"
+dataframeHeaderBackgroundColor = "#f1f5f9"
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "8px"                    # --radius
+buttonRadius = "6px"
+codeBackgroundColor = "#f1f5f9"
+codeTextColor = "#0f172a"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap, monospace"
+
+[theme.sidebar]
+backgroundColor = "#ffffff"           # --surface
+secondaryBackgroundColor = "#f1f5f9"

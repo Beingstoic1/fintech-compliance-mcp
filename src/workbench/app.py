@@ -23,193 +23,181 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom High-Craft Editorial Fintech Risk Console CSS (Inspired by Stripe, Linear, Mercury)
+# Institutional slate theme. Palette/fonts live in .streamlit/config.toml; tokens below mirror
+# docs/assets/site.css so the Workbench and the docs site read as one system.
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
   :root {
-    --fx-bg: #090d14;
-    --fx-surface: #0f1624;
-    --fx-card: #131d2e;
-    --fx-border: rgba(255, 255, 255, 0.08);
-    --fx-border-subtle: rgba(255, 255, 255, 0.05);
-    --fx-border-active: rgba(56, 189, 248, 0.35);
-    --fx-text: #f8fafc;
-    --fx-text-muted: #94a3b8;
-    --fx-text-dim: #64748b;
-    --fx-cyan: #38bdf8;
-    --fx-emerald: #10b981;
-    --fx-amber: #f59e0b;
-    --fx-rose: #f43f5e;
-    --fx-indigo: #6366f1;
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-2: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text: #0f172a;
+    --text-2: #334155;
+    --text-3: #475569;
+    --accent: #1e40af;
+    --accent-soft: #eff6ff;
+    --accent-border: #bfdbfe;
+    --pass-fg: #14532d;  --pass-bg: #f0fdf4;  --pass-bd: #bbf7d0;
+    --warn-fg: #713f12;  --warn-bg: #fefce8;  --warn-bd: #fde68a;
+    --block-fg: #7f1d1d; --block-bg: #fef2f2; --block-bd: #fecaca;
+    --info-fg: #1e3a8a;  --info-bg: #eff6ff;  --info-bd: #bfdbfe;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius-sm: 4px;
+    --radius: 8px;
   }
 
-  html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: var(--fx-text);
-  }
+  h1, h2, h3, h4 { letter-spacing: -0.015em; color: var(--text); }
 
-  h1, h2, h3, h4, .stTitle {
-    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
-    letter-spacing: -0.025em !important;
-    font-weight: 700 !important;
-  }
-
-  code, pre, .stCode, [data-testid="stMetricValue"], .font-mono {
-    font-family: 'JetBrains Mono', monospace !important;
+  /* Monospace for IDs, HMAC digests, policy/reason codes */
+  code, pre, .stCode, .mono,
+  [data-testid="stMetricValue"] {
+    font-family: var(--font-mono) !important;
     font-feature-settings: "tnum" 1, "zero" 1;
   }
-
-  /* Metric cards hairline styling */
-  [data-testid="metric-container"] {
-    border: 1px solid var(--fx-border) !important;
-    border-radius: 8px !important;
-    padding: 14px 18px !important;
-    background-color: var(--fx-card) !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+  .stMarkdown code, [data-testid="stExpander"] summary code {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 1px 5px;
+    font-size: 0.85em;
   }
-  [data-testid="metric-container"] label {
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
+
+  /* KPI metric cards: 1px hairline, no heavy shadow */
+  [data-testid="stMetric"], [data-testid="metric-container"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: none;
+  }
+  [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
     font-size: 11px !important;
     font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    color: var(--fx-text-muted) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-3) !important;
+  }
+  [data-testid="stMetricValue"] {
+    font-size: 1.6rem !important;
+    font-weight: 600 !important;
+    color: var(--text);
   }
 
-  /* Editorial Header Card */
-  .fintech-header-card {
-    background: #0f1624;
-    border: 1px solid var(--fx-border);
-    border-radius: 10px;
-    padding: 20px 24px;
-    margin-bottom: 20px;
+  /* Surfaces: borders, not shadows */
+  [data-testid="stExpander"] details,
+  [data-testid="stDataFrame"], [data-testid="stTable"],
+  [data-testid="stJson"], .stCode {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: none;
   }
+  [data-testid="stDataFrame"], [data-testid="stTable"] { overflow: hidden; }
+  [data-testid="stTable"] td, [data-testid="stTable"] th { font-variant-numeric: tabular-nums; }
+
   .header-tag {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(56, 189, 248, 0.08);
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    color: #38bdf8;
-    font-family: 'JetBrains Mono', monospace;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-border);
+    color: var(--accent);
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 600;
     padding: 3px 10px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
-  /* Semantic badges */
-  .badge-allow {
-    background-color: rgba(16, 185, 129, 0.12);
-    color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.28);
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
+  /* Semantic decision badges (fg on bg >= 7:1, matching the docs site) */
+  .badge-allow, .badge-redact, .badge-escalate, .badge-block {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-  }
-  .badge-redact {
-    background-color: rgba(245, 158, 11, 0.12);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.28);
     padding: 3px 10px;
-    border-radius: 4px;
-    font-weight: 600;
+    border: 1px solid;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
     font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .badge-escalate {
-    background-color: rgba(99, 102, 241, 0.12);
-    color: #a5b4fc;
-    border: 1px solid rgba(99, 102, 241, 0.28);
-    padding: 3px 10px;
-    border-radius: 4px;
     font-weight: 600;
-    font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
   }
-  .badge-block {
-    background-color: rgba(244, 63, 94, 0.12);
-    color: #fb7185;
-    border: 1px solid rgba(244, 63, 94, 0.28);
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: 11px;
-    font-family: 'JetBrains Mono', monospace;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
+  .badge-allow    { color: var(--pass-fg);  background: var(--pass-bg);  border-color: var(--pass-bd); }
+  .badge-redact   { color: var(--warn-fg);  background: var(--warn-bg);  border-color: var(--warn-bd); }
+  .badge-escalate { color: var(--info-fg);  background: var(--info-bg);  border-color: var(--info-bd); }
+  .badge-block    { color: var(--block-fg); background: var(--block-bg); border-color: var(--block-bd); }
 
-  /* Job to be done callout */
+  /* Job-to-be-done callout */
   .jtbd-card {
-    background: #0d1420;
-    border: 1px solid var(--fx-border);
-    border-left: 3px solid #38bdf8;
-    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
     padding: 16px 20px;
     margin-bottom: 24px;
     font-size: 13px;
     line-height: 1.6;
-    color: #cbd5e1;
+    color: var(--text-2);
   }
+  .jtbd-card .jtbd-title {
+    color: var(--text);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .jtbd-card p { margin: 0; color: var(--text-3); font-size: 13px; }
   .jtbd-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 16px;
     margin-top: 12px;
   }
   .jtbd-item {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid var(--fx-border-subtle);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 12px 14px;
   }
   .jtbd-item strong {
-    color: #f8fafc;
+    color: var(--text);
     display: block;
     font-size: 12px;
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  .jtbd-item span {
-    font-size: 12px;
-    color: #94a3b8;
+  .jtbd-item span { font-size: 12px; color: var(--text-3); }
+
+  .runbook {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.6;
   }
 
-  /* Clean Streamlit form elements */
-  .stButton>button {
-    font-family: 'Plus Jakarta Sans', sans-serif !important;
-    font-weight: 600 !important;
-    border-radius: 6px !important;
-    letter-spacing: -0.01em !important;
-    transition: all 0.15s ease !important;
-  }
-
-  /* Dataframe table refinement */
-  [data-testid="stDataFrame"] {
-    border: 1px solid var(--fx-border);
-    border-radius: 8px;
-    overflow: hidden;
+  .stButton > button {
+    font-weight: 600;
+    border-radius: 6px;
+    box-shadow: none;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out;
   }
 </style>
 """, unsafe_allow_html=True)
+
+
+def _num(label: str) -> Any:
+    """Column config for numeric / monetary values: right-aligned so digits line up."""
+    return st.column_config.Column(label, alignment="right")
+
+
+# Dataframe cells render on canvas (CSS can't reach them): align numerics via column_config.
+_AUDIT_COLS: dict[str, Any] = {"event_id": _num("event_id")}
 
 # Auto-initialize and seed DB on startup
 try:
@@ -239,55 +227,54 @@ except Exception as e:
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.title("🏦 Fintech Compliance Officer Workbench")
-    st.caption("Institutional Zero-Trust AI Guardrails · Model Context Protocol (FastMCP) · SHA-256 Chained Audit Ledger")
+    st.caption("Zero-trust guardrails for AI agents · Model Context Protocol server · HMAC-keyed, checkpointed audit ledger")
 with col_h2:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
     <div style="text-align: right;">
-      <span class="badge-allow">● SOC 2 TYPE II · RBI INVARIANT READY</span>
+      <span class="badge-escalate">● REFERENCE IMPLEMENTATION · NOT CERTIFIED</span>
     </div>
     """, unsafe_allow_html=True)
 
 # Dedicated Fintech Job-To-Be-Done & Real-World Utility Callout
 st.markdown("""
 <div class="jtbd-card">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-    <strong style="color: #f8fafc; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;">
-      Fintech Job-To-Be-Done: Zero-Trust Guardrails for Autonomous Banking Agents
+  <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <strong class="jtbd-title">
+      Job to be done: guardrails between AI agents and fintech operations
     </strong>
-    <span class="header-tag">Operational Security Specification</span>
+    <span class="header-tag">Reference implementation</span>
   </div>
-  <p style="margin: 0; color: #94a3b8; font-size: 13px;">
-    Autonomous financial agents executing directly against core-banking ledgers create catastrophic failure modes:
-    hallucinated fee refunds, unauthorized account freezes, and prompt injection data exfiltration.
-    This system enforces three deterministic guarantees between the LLM and your financial infrastructure:
+  <p>
+    An AI agent with direct access to a core-banking ledger can issue an unwarranted refund, freeze the wrong account,
+    or follow instructions planted in a transaction memo. This server places three controls between the LLM and the ledger:
   </p>
   <div class="jtbd-grid">
     <div class="jtbd-item">
-      <strong>1. Zero-Trust Identity & Masking</strong>
-      <span>Actor role and tenant ID resolved exclusively from server-side session tokens. PII masked for junior analysts; prompt injection stripped.</span>
+      <strong>1. Identity &amp; least-privilege disclosure</strong>
+      <span>Role and tenant come from a verified, transport-bound JWT, never from tool arguments. Junior analysts get masked names, account numbers and tax IDs; counterparty memos arrive unmodified inside an <code>untrusted_text</code> envelope.</span>
     </div>
     <div class="jtbd-item">
-      <strong>2. Four-Eyes Dual-Control Gate</strong>
-      <span>State mutations generate a 15-minute approval token bound to exact SHA-256 arguments. Strict anti-self-approval invariant prevents rogue actions.</span>
+      <strong>2. Four-Eyes approval</strong>
+      <span>Freezes and refunds are staged as approvals that expire after 15 minutes, bound to their exact arguments with HMAC-SHA256. A different, step-up-authenticated compliance officer must approve; self-approval is rejected.</span>
     </div>
     <div class="jtbd-item">
-      <strong>3. Mathematical Audit Proof</strong>
-      <span>Every event is cryptographically hash-chained with SHA-256. Any historical row alteration or deletion is instantly flagged by the integrity verifier.</span>
+      <strong>3. Tamper-evident audit</strong>
+      <span>Every decision is written to an HMAC-SHA256 chain with append-only triggers and signed checkpoints. The verifier detects edited rows and tail truncation; it cannot prevent them.</span>
     </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
 # Collapsible 60-Second Guided Demo Banner
-with st.expander("⏱️ **60-Second Operational Runbook: 3 Clicks to Test All Guardrails**", expanded=False):
+with st.expander("⏱️ **Guided walkthrough: three checks across the tabs**", expanded=False):
     st.markdown("""
-    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--fx-border); border-radius: 6px; padding: 14px 18px; font-size: 13px; color: #cbd5e1; line-height: 1.6;">
-      <strong>Step-by-Step Operator Verification:</strong>
+    <div class="runbook">
+      <strong>Operator walkthrough:</strong>
       <ol style="margin-top: 8px; padding-left: 20px;">
-        <li><strong>Verify PII Masking:</strong> In <strong>Tab 1</strong>, keep role as <code>junior_alice</code>, select <code>get_account_profile</code> for <code>ACC-001</code>, and click <strong>Run Tool</strong>. Account number masks to <code>****4821</code> and PAN to <code>XXXXX234F</code> (<code>REDACT</code>). Switch role to <code>senior_carol</code> to see unmasked privileged access!</li>
-        <li><strong>Four-Eyes Dual-Control:</strong> In <strong>Tab 1</strong>, select <code>senior_carol</code> and run <code>request_account_freeze</code> for <code>ACC-010</code> to generate a 15-minute approval gate. Then switch to <strong>Tab 2</strong> as <code>officer_eve</code> to inspect evidence and click <strong>Approve Only</strong> or <strong>Approve & Execute</strong>. (Attempting self-approval triggers an immediate <code>DUAL_CONTROL_VIOLATION</code>).</li>
-        <li><strong>Cryptographic Tamper Lab:</strong> Go to <strong>Tab 3</strong> to view the live SHA-256 hash-chained ledger. Click <strong>Simulate Database Tampering</strong> to modify a historical row in SQLite and watch the verifier instantly pinpoint the exact corrupted row!</li>
+        <li><strong>Verify PII Masking:</strong> In <strong>Tab 1</strong>, keep role as <code>junior_alice</code>, select <code>get_account_profile</code> for <code>ACC-001</code>, and click <strong>Run Tool</strong>. Account number masks to <code>****4821</code> and PAN to <code>XXXXX234F</code> (<code>REDACT</code>). Switch role to <code>senior_carol</code> to see the same fields unmasked (<code>ALLOW</code>).</li>
+        <li><strong>Four-Eyes Dual-Control:</strong> In <strong>Tab 1</strong>, select <code>senior_carol</code> and run <code>request_account_freeze</code> for <code>ACC-010</code> to generate a 15-minute approval gate. Then switch to <strong>Tab 2</strong> as <code>officer_eve</code> to inspect evidence and click <strong>Approve Only</strong> or <strong>Approve & Execute</strong>. An officer cannot approve their own request (<code>DUAL_CONTROL_VIOLATION</code>).</li>
+        <li><strong>Cryptographic Tamper Lab:</strong> Go to <strong>Tab 3</strong> to view the HMAC-keyed audit chain. Click <strong>Simulate Database Tampering</strong> to edit a historical row in SQLite, then see the verifier report the first broken link.</li>
       </ol>
     </div>
     """, unsafe_allow_html=True)
@@ -456,7 +443,7 @@ with tab2:
         st.metric("Open Approval Requests", len(approvals))
         for appr in approvals:
             appr_id = appr["approval_id"]
-            with st.expander(f"🔶 [{appr['tool_name']}] · ID: {appr_id[:12]}... (Requested by: {appr['requester_sub']})"):
+            with st.expander(f"🔶 `{appr['tool_name']}` · ID `{appr_id[:12]}…` · requested by `{appr['requester_sub']}`"):
                 c1, c2 = st.columns(2)
                 with c1:
                     st.markdown(f"**Tenant ID:** `{appr['tenant_id']}`")
@@ -535,7 +522,7 @@ with tab3:
                         "tenant_id", "tool_name", "decision",
                         "prev_hash_short", "entry_hash_short"]
         avail = [c for c in display_cols if c in df.columns]
-        st.dataframe(df[avail], width="stretch", height=280)
+        st.dataframe(df[avail], width="stretch", height=280, column_config=_AUDIT_COLS)
         st.metric("Total Cryptographic Log Rows", len(logs))
     else:
         st.info("No audit logs yet. Run tools in Tab 1 to populate the ledger.")
@@ -593,7 +580,7 @@ with tab3:
 
     with st.expander("🔎 View Full Cryptographic Payload"):
         if logs:
-            st.dataframe(pd.DataFrame(logs), width="stretch")
+            st.dataframe(pd.DataFrame(logs), width="stretch", column_config=_AUDIT_COLS)
 
 
 # ─── TAB 4: OPERATIONAL TELEMETRY (T24) ──────────────────────────────────────
@@ -637,13 +624,14 @@ with tab4:
         st.subheader("Tool Latency (p50 / p95)")
         if dash.latency:
             st.dataframe(pd.DataFrame([{"tool": s.tool, "calls": s.calls, "p50": _ms(s.p50_ms), "p95": _ms(s.p95_ms)}
-                                       for s in dash.latency]), width="stretch", hide_index=True)
+                                       for s in dash.latency]), width="stretch", hide_index=True,
+                         column_config={"calls": _num("calls"), "p50": _num("p50"), "p95": _num("p95")})
         else:
             st.info("No tool calls recorded yet. Run tools in Tab 1.")
     with c_blk:
         st.subheader("Blocked Actions by Reason Code")
         if dash.blocked:
             st.dataframe(pd.DataFrame(dash.blocked, columns=["reason_code", "count"]),
-                         width="stretch", hide_index=True)
+                         width="stretch", hide_index=True, column_config={"count": _num("count")})
         else:
             st.info("No blocked actions recorded.")
