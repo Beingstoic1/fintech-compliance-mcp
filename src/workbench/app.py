@@ -1,6 +1,7 @@
 """
 Fintech Compliance Officer Workbench — Streamlit App
-3-tab interactive enterprise UI: Guardrail Simulator | Approval Queue | Audit Ledger & Tamper Lab
+Institutional Zero-Trust AI Guardrails Console
+3-Tab Interactive Enterprise UI: Guardrail Simulator | Four-Eyes Approval Queue | Cryptographic Audit Ledger & Tamper Lab
 """
 import json
 import sys
@@ -23,78 +24,190 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Enterprise Risk Console CSS
+# Custom High-Craft Editorial Fintech Risk Console CSS (Inspired by Stripe, Linear, Mercury)
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --fx-bg: #090d14;
+    --fx-surface: #0f1624;
+    --fx-card: #131d2e;
+    --fx-border: rgba(255, 255, 255, 0.08);
+    --fx-border-subtle: rgba(255, 255, 255, 0.05);
+    --fx-border-active: rgba(56, 189, 248, 0.35);
+    --fx-text: #f8fafc;
+    --fx-text-muted: #94a3b8;
+    --fx-text-dim: #64748b;
+    --fx-cyan: #38bdf8;
+    --fx-emerald: #10b981;
+    --fx-amber: #f59e0b;
+    --fx-rose: #f43f5e;
+    --fx-indigo: #6366f1;
+  }
 
   html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--fx-text);
   }
-  code, pre, .stCode, [data-testid="stMetricValue"] {
+
+  h1, h2, h3, h4, .stTitle {
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
+    letter-spacing: -0.025em !important;
+    font-weight: 700 !important;
+  }
+
+  code, pre, .stCode, [data-testid="stMetricValue"], .font-mono {
     font-family: 'JetBrains Mono', monospace !important;
+    font-feature-settings: "tnum" 1, "zero" 1;
   }
 
   /* Metric cards hairline styling */
   [data-testid="metric-container"] {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 12px 16px;
-    background-color: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--fx-border) !important;
+    border-radius: 8px !important;
+    padding: 14px 18px !important;
+    background-color: var(--fx-card) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+  }
+  [data-testid="metric-container"] label {
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: var(--fx-text-muted) !important;
+  }
+
+  /* Editorial Header Card */
+  .fintech-header-card {
+    background: #0f1624;
+    border: 1px solid var(--fx-border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+  .header-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    color: #38bdf8;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   /* Semantic badges */
   .badge-allow {
-    background-color: rgba(16, 185, 129, 0.15);
+    background-color: rgba(16, 185, 129, 0.12);
     color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    padding: 2px 8px;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    padding: 3px 10px;
     border-radius: 4px;
     font-weight: 600;
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
   .badge-redact {
-    background-color: rgba(245, 158, 11, 0.15);
+    background-color: rgba(245, 158, 11, 0.12);
     color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.3);
-    padding: 2px 8px;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    padding: 3px 10px;
     border-radius: 4px;
     font-weight: 600;
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
   .badge-escalate {
-    background-color: rgba(99, 102, 241, 0.15);
+    background-color: rgba(99, 102, 241, 0.12);
     color: #a5b4fc;
-    border: 1px solid rgba(99, 102, 241, 0.3);
-    padding: 2px 8px;
+    border: 1px solid rgba(99, 102, 241, 0.28);
+    padding: 3px 10px;
     border-radius: 4px;
     font-weight: 600;
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
   .badge-block {
-    background-color: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    padding: 2px 8px;
+    background-color: rgba(244, 63, 94, 0.12);
+    color: #fb7185;
+    border: 1px solid rgba(244, 63, 94, 0.28);
+    padding: 3px 10px;
     border-radius: 4px;
     font-weight: 600;
     font-size: 11px;
     font-family: 'JetBrains Mono', monospace;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
 
-  /* Guide banner box */
-  .guided-banner {
-    background: linear-gradient(90deg, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%);
-    border: 1px solid rgba(56, 189, 248, 0.25);
+  /* Job to be done callout */
+  .jtbd-card {
+    background: #0d1420;
+    border: 1px solid var(--fx-border);
+    border-left: 3px solid #38bdf8;
     border-radius: 8px;
-    padding: 14px 18px;
-    margin-bottom: 20px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
     font-size: 13px;
-    color: #cbd5e1;
     line-height: 1.6;
+    color: #cbd5e1;
+  }
+  .jtbd-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .jtbd-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--fx-border-subtle);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+  .jtbd-item strong {
+    color: #f8fafc;
+    display: block;
+    font-size: 12px;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .jtbd-item span {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  /* Clean Streamlit form elements */
+  .stButton>button {
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    letter-spacing: -0.01em !important;
+    transition: all 0.15s ease !important;
+  }
+
+  /* Dataframe table refinement */
+  [data-testid="stDataFrame"] {
+    border: 1px solid var(--fx-border);
+    border-radius: 8px;
+    overflow: hidden;
   }
 </style>
 """, unsafe_allow_html=True)
@@ -103,14 +216,13 @@ st.markdown("""
 try:
     from src.db.database import (
         DB_PATH, init_db, get_account, get_transactions, detect_structuring,
-        get_pending_approvals, get_approval, update_approval_status,
-        atomic_consume_approval, freeze_account, refund_transaction, create_approval
     )
-    from src.db.audit import get_audit_log, verify_audit_chain, tamper_row, restore_row, init_audit_table
-    from src.security.session import DEMO_TOKENS, SessionRegistry
-    from src.security.guardrails import (
-        pre_check, post_process, compute_args_sha256, canonical_json
-    )
+    from src.domain import approvals as fsm
+    from src.services import approvals as four_eyes
+    from src.db.audit import get_audit_log, verify_audit_chain, init_audit_table
+    from src.demo import tamper_lab
+    from src.security.session import DEMO_DIRECTORY
+    from src.security.identity import authenticated, call_as, issue_demo_token, verify_jwt
     # Ensure directory and database are initialized
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     init_db()
@@ -119,27 +231,58 @@ except Exception as e:
     st.error(f"Startup initialization error: {e}")
     st.stop()
 
-# Header Area
+# Header Area with Editorial Fintech Risk Console Identity
 col_h1, col_h2 = st.columns([3, 1])
 with col_h1:
     st.title("🏦 Fintech Compliance Officer Workbench")
-    st.caption("Institutional Zero-Trust AI Guardrails · Model Context Protocol (FastMCP) · SHA-256 Audit Chain")
+    st.caption("Institutional Zero-Trust AI Guardrails · Model Context Protocol (FastMCP) · SHA-256 Chained Audit Ledger")
 with col_h2:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
     <div style="text-align: right;">
-      <span class="badge-allow">● SOC 2 / RBI INVARIANT READY</span>
+      <span class="badge-allow">● SOC 2 TYPE II · RBI INVARIANT READY</span>
     </div>
     """, unsafe_allow_html=True)
 
+# Dedicated Fintech Job-To-Be-Done & Real-World Utility Callout
+st.markdown("""
+<div class="jtbd-card">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <strong style="color: #f8fafc; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em;">
+      Fintech Job-To-Be-Done: Zero-Trust Guardrails for Autonomous Banking Agents
+    </strong>
+    <span class="header-tag">Operational Security Specification</span>
+  </div>
+  <p style="margin: 0; color: #94a3b8; font-size: 13px;">
+    Autonomous financial agents executing directly against core-banking ledgers create catastrophic failure modes: 
+    hallucinated fee refunds, unauthorized account freezes, and prompt injection data exfiltration. 
+    This system enforces three deterministic guarantees between the LLM and your financial infrastructure:
+  </p>
+  <div class="jtbd-grid">
+    <div class="jtbd-item">
+      <strong>1. Zero-Trust Identity & Masking</strong>
+      <span>Actor role and tenant ID resolved exclusively from server-side session tokens. PII masked for junior analysts; prompt injection stripped.</span>
+    </div>
+    <div class="jtbd-item">
+      <strong>2. Four-Eyes Dual-Control Gate</strong>
+      <span>State mutations generate a 15-minute approval token bound to exact SHA-256 arguments. Strict anti-self-approval invariant prevents rogue actions.</span>
+    </div>
+    <div class="jtbd-item">
+      <strong>3. Mathematical Audit Proof</strong>
+      <span>Every event is cryptographically hash-chained with SHA-256. Any historical row alteration or deletion is instantly flagged by the integrity verifier.</span>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
 # Collapsible 60-Second Guided Demo Banner
-with st.expander("⏱️ **60-Second Guided Demo: 3 Clicks to Test All Guardrails**", expanded=True):
+with st.expander("⏱️ **60-Second Operational Runbook: 3 Clicks to Test All Guardrails**", expanded=False):
     st.markdown("""
-    <div class="guided-banner">
-      <strong>Welcome to the Zero-Trust Compliance Console!</strong> Try these 3 self-contained tests:
-      <ol style="margin-top: 6px; padding-left: 20px;">
-        <li><strong>Verify PII Masking:</strong> In <strong>Tab 1</strong>, keep role as <code>junior_alice</code>, select <code>get_account_profile</code> for <code>ACC-001</code>, and click <strong>Run Tool</strong>. Notice how account numbers become <code>****4821</code> and PAN becomes <code>XXXXX234F</code> (Decision: <code>REDACT</code>). Switch role to <code>senior_carol</code> to see unmasked privileged access!</li>
-        <li><strong>Four-Eyes HITL Control:</strong> In <strong>Tab 1</strong>, select <code>senior_carol</code> and run <code>request_account_freeze</code> for <code>ACC-010</code> to generate a 15-min approval gate. Then switch to <strong>Tab 2</strong> as <code>officer_eve</code> to inspect evidence and click <strong>Approve</strong>. (Attempting self-approval triggers an immediate <code>DUAL_CONTROL_VIOLATION</code>).</li>
+    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--fx-border); border-radius: 6px; padding: 14px 18px; font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+      <strong>Step-by-Step Operator Verification:</strong>
+      <ol style="margin-top: 8px; padding-left: 20px;">
+        <li><strong>Verify PII Masking:</strong> In <strong>Tab 1</strong>, keep role as <code>junior_alice</code>, select <code>get_account_profile</code> for <code>ACC-001</code>, and click <strong>Run Tool</strong>. Account number masks to <code>****4821</code> and PAN to <code>XXXXX234F</code> (<code>REDACT</code>). Switch role to <code>senior_carol</code> to see unmasked privileged access!</li>
+        <li><strong>Four-Eyes Dual-Control:</strong> In <strong>Tab 1</strong>, select <code>senior_carol</code> and run <code>request_account_freeze</code> for <code>ACC-010</code> to generate a 15-minute approval gate. Then switch to <strong>Tab 2</strong> as <code>officer_eve</code> to inspect evidence and click <strong>Approve Only</strong> or <strong>Approve & Execute</strong>. (Attempting self-approval triggers an immediate <code>DUAL_CONTROL_VIOLATION</code>).</li>
         <li><strong>Cryptographic Tamper Lab:</strong> Go to <strong>Tab 3</strong> to view the live SHA-256 hash-chained ledger. Click <strong>Simulate Database Tampering</strong> to modify a historical row in SQLite and watch the verifier instantly pinpoint the exact corrupted row!</li>
       </ol>
     </div>
@@ -159,19 +302,19 @@ with tab1:
         st.subheader("Zero-Trust Session")
         role_label = st.selectbox(
             "Active User / Identity",
-            list(DEMO_TOKENS.keys()),
+            list(DEMO_DIRECTORY.keys()),
             index=0,
-            help="Resolved strictly from server-side token registry — client cannot spoof actor_role"
+            help="Dev issuer mints a signed, 15-minute JWT; role and tenant come only from its verified claims"
         )
-        session_token = DEMO_TOKENS[role_label]
+        session_token = issue_demo_token(role_label)
         try:
-            current_session = SessionRegistry.resolve(session_token)
-            st.markdown(f"**Role:** `{current_session.actor_role}`")
+            current_session = verify_jwt(session_token)
+            st.markdown(f"**Role:** `{current_session.role}`")
             st.markdown(f"**Tenant ID:** `{current_session.tenant_id}`")
             st.markdown(f"**Session Sub:** `{current_session.sub}`")
-            st.markdown(f"**Token:** `{session_token[:10]}...`")
-        except Exception as e:
-            st.error(str(e))
+            st.markdown("**Credential:** signed JWT (exp 15 min), bound out of band — never a tool argument")
+        except Exception:
+            st.error("UNAUTHENTICATED")
 
     tool_choice = st.selectbox("Select MCP Tool", [
         "get_account_profile",
@@ -200,9 +343,9 @@ with tab1:
             "limit": int(limit)
         }
     elif tool_choice == "detect_structuring_anomalies":
-        tenant_id = st.selectbox("tenant_id", ["tenant_neobank_in", "tenant_b2b_cards"])
+        st.caption("Scoped to your authenticated tenant; there is no tenant argument.")
         threshold_cents = st.number_input("threshold_cents", value=999900, step=1000, help="Sub-threshold structuring limit (default ₹9,999 in paise)")
-        args_dict = {"tenant_id": tenant_id, "threshold_cents": int(threshold_cents)}
+        args_dict = {"threshold_cents": int(threshold_cents)}
     elif tool_choice == "request_account_freeze":
         account_id = st.text_input("account_id", value="ACC-010")
         reason = st.text_area("reason", value="Suspected sub-threshold smurfing ring activity linked to merchant ACC-015")
@@ -218,135 +361,61 @@ with tab1:
         args_dict = {"approval_id": approval_id}
 
     if st.button("▶️ Run Tool", type="primary"):
-        # Pre-check: RBAC validation
+        # Every tool runs through the MCP handler under the verified principal: one
+        # implementation of RBAC, validation, projection, Four-Eyes, and audit.
+        from src.mcp_server import server as mcp_handlers
+        res, error = None, None
         try:
-            session = pre_check(session_token, tool_choice, args_dict)
-        except PermissionError as e:
-            st.error(f"🚫 **RBAC BLOCK** — {e}")
-            from src.db.audit import log_event
-            log_event(role_label, "unknown", "unknown", tool_choice,
-                      compute_args_sha256(tool_choice, args_dict, role_label), "BLOCK", str(e))
-            st.stop()
-        except ValueError as e:
-            st.error(f"❌ **Session Error** — {e}")
-            st.stop()
-
-        args_sha256 = compute_args_sha256(tool_choice, args_dict, session.sub)
-
-        # Execute the tool
-        raw_result = None
-        error = None
-        try:
-            if tool_choice == "get_account_profile":
-                raw_result = get_account(args_dict.get("account_id"), session.tenant_id)
-                if not raw_result:
-                    error = "Account not found in your tenant scope"
-            elif tool_choice == "query_transactions":
-                raw_result = get_transactions(
-                    args_dict.get("account_id"),
-                    args_dict.get("start_date") or None,
-                    args_dict.get("end_date") or None,
-                    int(args_dict.get("limit", 20))
-                )
-            elif tool_choice == "detect_structuring_anomalies":
-                raw_result = detect_structuring(
-                    args_dict.get("tenant_id", "tenant_neobank_in"),
-                    int(args_dict.get("threshold_cents", 999900))
-                )
-            elif tool_choice == "request_account_freeze":
-                appr_id = str(uuid.uuid4())
-                exp_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
-                can_args = canonical_json(args_dict)
-                create_approval(appr_id, session.sub, session.actor_role,
-                                tool_choice, can_args, args_sha256, exp_at,
-                                tenant_id=session.tenant_id)
-                raw_result = {"approval_id": appr_id, "expires_in_seconds": 900,
-                              "status": "PENDING", "decision": "ESCALATE"}
-                from src.db.audit import log_event
-                log_event(session.sub, session.actor_role, session.tenant_id,
-                          tool_choice, args_sha256, "ESCALATE", f"Created: {appr_id}")
-                st.success("🔶 **Approval Gate Created!** Requires Compliance Officer Dual-Control")
-                st.code(appr_id, language="text")
-                st.info("💡 Copy this `approval_id` to approve it in **Tab 2** as `officer_eve`, or execute it with `execute_approved_action`.")
-            elif tool_choice == "request_fee_refund":
-                appr_id = str(uuid.uuid4())
-                exp_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
-                can_args = canonical_json(args_dict)
-                create_approval(appr_id, session.sub, session.actor_role,
-                                tool_choice, can_args, args_sha256, exp_at,
-                                tenant_id=session.tenant_id)
-                raw_result = {"approval_id": appr_id, "expires_in_seconds": 900,
-                              "status": "PENDING", "decision": "ESCALATE"}
-                from src.db.audit import log_event
-                log_event(session.sub, session.actor_role, session.tenant_id,
-                          tool_choice, args_sha256, "ESCALATE", f"Created: {appr_id}")
-                st.success("🔶 **Refund Approval Created!**")
-                st.code(appr_id, language="text")
-            elif tool_choice == "execute_approved_action":
-                appr_id = args_dict.get("approval_id", "")
-                approval = get_approval(appr_id)
-                if not approval:
-                    error = "Approval not found"
-                elif approval["status"] not in ("PENDING", "APPROVED"):
-                    error = f"ALREADY_{approval['status']}: approval cannot be executed"
-                elif datetime.now(timezone.utc).isoformat() > approval["expires_at"]:
-                    error = "EXPIRED: approval has passed its 15-minute TTL"
-                elif approval["requester_sub"] == session.sub:
-                    error = "DUAL_CONTROL_VIOLATION: compliance_officer cannot approve their own request"
-                elif approval.get("tenant_id") and approval["tenant_id"] != session.tenant_id:
-                    error = f"TENANT_ISOLATION_VIOLATION: approval belongs to {approval['tenant_id']}, not {session.tenant_id}"
-                else:
-                    orig_args = json.loads(approval["canonical_args_json"])
-                    exp_sha = compute_args_sha256(approval["tool_name"], orig_args, approval["requester_sub"])
-                    if exp_sha != approval["args_sha256"]:
-                        error = "ARGUMENT_HASH_MISMATCH: approval binding invalid"
-                    else:
-                        consumed = atomic_consume_approval(appr_id, session.sub,
-                                                           datetime.now(timezone.utc).isoformat())
-                        if not consumed:
-                            error = "ALREADY_CONSUMED: approval was consumed by a concurrent request"
-                        else:
-                            if approval["tool_name"] == "request_account_freeze":
-                                freeze_account(orig_args["account_id"])
-                                raw_result = {"result": "Account frozen successfully", "account_id": orig_args["account_id"]}
-                            elif approval["tool_name"] == "request_fee_refund":
-                                new_id = refund_transaction(orig_args["transaction_id"], orig_args["amount_cents"])
-                                raw_result = {"result": "Refund processed successfully", "new_txn_id": new_id}
-                            from src.db.audit import log_event
-                            log_event(session.sub, session.actor_role, session.tenant_id,
-                                      tool_choice, args_sha256, "EXECUTED", f"Executed {approval['tool_name']}")
-        except Exception as ex:
-            error = str(ex)
+            res = call_as(session_token, getattr(mcp_handlers, tool_choice), **args_dict)
+        except Exception:
+            # Never surface internal exception text in the UI.
+            error = "Request failed: invalid input or internal error"
+        if res is not None and res.get("decision") == "BLOCK":
+            error = res.get("error", "Blocked")
 
         if error:
             st.error(f"🚫 **Action Blocked:** {error}")
-        elif raw_result is not None and tool_choice not in ("request_account_freeze", "request_fee_refund"):
-            processed = post_process(raw_result, session, tool_choice, args_sha256)
-            from src.db.audit import log_event
-            log_event(session.sub, session.actor_role, session.tenant_id,
-                      tool_choice, args_sha256, processed["decision"])
+        elif tool_choice in ("request_account_freeze", "request_fee_refund"):
+            label = ("🔶 **Approval Gate Created!** Requires Compliance Officer Dual-Control"
+                     if tool_choice == "request_account_freeze" else "🔶 **Refund Approval Created!**")
+            st.success(label)
+            st.code(res["approval_id"], language="text")
+            st.info("💡 Copy this `approval_id` to approve it in **Tab 2** as `officer_eve`, or execute it with `execute_approved_action`.")
+        else:
+            # Raw view is fetched for this console only (tenant-scoped); it never reaches the LLM.
+            if tool_choice == "get_account_profile":
+                raw_view = get_account(args_dict["account_id"], current_session.tenant_id)
+            elif tool_choice == "query_transactions":
+                raw_view = get_transactions(args_dict["account_id"], args_dict["start_date"] or None,
+                                            args_dict["end_date"] or None, args_dict["limit"],
+                                            tenant_id=current_session.tenant_id)
+            elif tool_choice == "detect_structuring_anomalies":
+                raw_view = detect_structuring(current_session.tenant_id, args_dict["threshold_cents"])
+            else:
+                raw_view = res
+            guarded = res.get("data", res)
 
-            decision = processed["decision"]
+            decision = res["decision"]
             if decision == "ALLOW":
                 st.markdown('<span class="badge-allow">● DECISION: ALLOW (Unmasked Privileged Output)</span>', unsafe_allow_html=True)
             elif decision == "REDACT":
-                st.markdown('<span class="badge-redact">● DECISION: REDACT (PII Masked for Junior Analyst)</span>', unsafe_allow_html=True)
+                st.markdown('<span class="badge-redact">● DECISION: REDACT (Fields projected / PII masked)</span>', unsafe_allow_html=True)
             else:
                 st.markdown(f'<span class="badge-block">● DECISION: {decision}</span>', unsafe_allow_html=True)
 
             col_raw, col_guard = st.columns(2)
             with col_raw:
                 st.subheader("📋 Raw Database Record")
-                st.json(raw_result)
+                st.json(raw_view)
             with col_guard:
                 st.subheader("🛡️ Guardrailed Agent Output")
-                st.json(processed["data"])
+                st.json(guarded)
 
-            # Prompt injection warning check
-            proc_str = json.dumps(processed["data"])
-            if "[INJECTION STRIPPED]" in proc_str:
-                st.warning("⚠️ **Prompt Injection Neutralized:** Adversarial instructions in the transaction memo were scrubbed before reaching the LLM context window.")
-
+            rows = guarded if isinstance(guarded, list) else [guarded]
+            if any(isinstance(v, dict) and v.get("injection_signals")
+                   for r in rows if isinstance(r, dict) for v in r.values()):
+                st.warning("⚠️ **Injection signals detected:** the memo is delivered inside an `untrusted_text` envelope. "
+                           "It cannot trigger a mutation: those require RBAC plus Four-Eyes sign-off.")
 
 # ─── TAB 2: FOUR-EYES APPROVAL QUEUE ─────────────────────────────────────────
 with tab2:
@@ -356,38 +425,41 @@ with tab2:
     co_label = st.selectbox("Acting Compliance Officer",
                             ["officer_eve", "officer_frank"],
                             help="Only compliance_officer roles have approval permissions")
-    co_token = DEMO_TOKENS[co_label]
+    # Approval console = the out-of-band human channel. Its session carries a step-up
+    # `amr` (simulated WebAuthn/MFA in this dev build); MCP agent tokens do not, so an
+    # agent can execute only what a human has already signed off here.
+    co_token = issue_demo_token(co_label, amr=("pwd", "mfa"))
     try:
-        co_session = SessionRegistry.resolve(co_token)
-        st.info(f"**Authenticated Identity:** `{co_session.sub}` | **Role:** `{co_session.actor_role}` | **Tenant:** `{co_session.tenant_id}`")
-    except Exception as e:
-        st.error(str(e))
+        co_session = verify_jwt(co_token)
+        st.info(f"**Authenticated Identity:** `{co_session.sub}` | **Role:** `{co_session.role}` | "
+                f"**Tenant:** `{co_session.tenant_id}` | **Auth:** `{'+'.join(co_session.amr)}` (step-up)")
+    except Exception:
+        st.error("UNAUTHENTICATED")
         st.stop()
 
     if st.button("🔄 Refresh Queue"):
         st.rerun()
 
-    approvals = get_pending_approvals()
+    four_eyes.sweep_expired(co_session.tenant_id)
+    approvals = four_eyes.list_open(co_session.tenant_id)  # tenant-scoped queue
 
     if not approvals:
         st.info("📭 No pending approvals. Switch to Tab 1 as `senior_carol` to create an account freeze or refund request.")
     else:
-        st.metric("Pending Approval Requests", len(approvals))
+        st.metric("Open Approval Requests", len(approvals))
         for appr in approvals:
             appr_id = appr["approval_id"]
             with st.expander(f"🔶 [{appr['tool_name']}] · ID: {appr_id[:12]}... (Requested by: {appr['requester_sub']})"):
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.markdown(f"**Tenant ID:** `{appr.get('tenant_id') or 'N/A'}`")
+                    st.markdown(f"**Tenant ID:** `{appr['tenant_id']}`")
                     st.markdown(f"**Requester Sub:** `{appr['requester_sub']}`")
                     st.markdown(f"**Requester Role:** `{appr['requester_role']}`")
                     st.markdown(f"**Created At (UTC):** {appr['created_at']}")
                     st.markdown(f"**Expires At (UTC):** {appr['expires_at']}")
-
-                    if datetime.now(timezone.utc).isoformat() > appr["expires_at"]:
-                        st.markdown('<span class="badge-block">⌛ STATUS: EXPIRED</span>', unsafe_allow_html=True)
-                    elif appr.get("status") == "APPROVED":
-                        st.markdown('<span class="badge-allow">● STATUS: APPROVED (AWAITING EXECUTION)</span>', unsafe_allow_html=True)
+                    st.markdown(f"**Binding:** HMAC-SHA256 · key `{appr['key_id']}`")
+                    if appr["status"] == fsm.APPROVED:
+                        st.markdown(f'<span class="badge-allow">● STATUS: APPROVED by {appr["approver_sub"]} (AWAITING EXECUTION)</span>', unsafe_allow_html=True)
                     else:
                         st.markdown('<span class="badge-escalate">● STATUS: AWAITING APPROVAL</span>', unsafe_allow_html=True)
 
@@ -398,53 +470,52 @@ with tab2:
                     except Exception:
                         st.code(appr["canonical_args_json"])
 
-                # Strict Four-Eyes verification
-                if co_session.actor_role != "compliance_officer":
-                    st.warning("⚠️ Active role must be compliance_officer to approve.")
-                elif appr["requester_sub"] == co_session.sub:
+                if appr["requester_sub"] == co_session.sub:
                     st.error("🔒 **DUAL_CONTROL_VIOLATION**: Four-Eyes invariant prohibits self-approval. A different officer must approve.")
-                elif appr.get("tenant_id") and appr["tenant_id"] != co_session.tenant_id:
-                    st.error(f"🔒 **TENANT_ISOLATION_VIOLATION**: Request belongs to `{appr['tenant_id']}`. Acting officer is in `{co_session.tenant_id}`.")
+                    continue
+
+                # All rules are enforced by the service; the UI only routes clicks.
+                from src.mcp_server.server import execute_approved_action, reject_approved_action
+                b1, b2, b3 = st.columns(3)
+                if appr["status"] == fsm.PENDING:
+                    if b1.button("✅ Approve Only", key=f"appr_{appr_id}"):
+                        with authenticated(co_token) as officer:
+                            res = four_eyes.approve(officer, appr_id)
+                        (st.success if res["decision"] == "APPROVED" else st.error)(
+                            "✅ Request Approved! Ready for execution." if res["decision"] == "APPROVED"
+                            else f"Approval error: {res.get('error')}")
+                        st.rerun()
                 else:
-                    b1, b2, b3 = st.columns(3)
-                    if appr.get("status") != "APPROVED":
-                        if b1.button("✅ Approve Only", key=f"appr_{appr_id}"):
-                            update_approval_status(appr_id, "APPROVED", approver_sub=co_session.sub)
-                            from src.db.audit import log_event
-                            log_event(co_session.sub, co_session.actor_role, co_session.tenant_id,
-                                      "approve_action", compute_args_sha256("approve_action", {"approval_id": appr_id}, co_session.sub),
-                                      "ALLOW", f"Approved by {co_session.sub}")
-                            st.success("✅ Request Approved! Ready for execution.")
-                            st.rerun()
+                    b1.info("Already Approved")
+
+                btn_label = "⚡ Approve & Execute" if appr["status"] == fsm.PENDING else "▶️ Execute Action"
+                if b2.button(btn_label, key=f"exec_{appr_id}", type="primary"):
+                    res = {"decision": fsm.APPROVED}
+                    if appr["status"] == fsm.PENDING:
+                        with authenticated(co_token) as officer:
+                            res = four_eyes.approve(officer, appr_id)
+                    if res["decision"] == fsm.APPROVED:
+                        res = call_as(co_token, execute_approved_action, appr_id)
+                    if res.get("decision") == "EXECUTED":
+                        st.success(f"⚡ Successfully executed: {res.get('action')}")
                     else:
-                        b1.info("Already Approved")
+                        st.error(f"Execution error: {res.get('error')}")
+                    st.rerun()
 
-                    btn_label = "⚡ Approve & Execute" if appr.get("status") != "APPROVED" else "▶️ Execute Action"
-                    if b2.button(btn_label, key=f"exec_{appr_id}", type="primary"):
-                        from src.mcp_server.server import execute_approved_action
-                        exec_res = execute_approved_action(co_token, appr_id)
-                        if exec_res.get("decision") == "EXECUTED":
-                            st.success(f"⚡ Successfully executed: {exec_res.get('action')}")
-                        else:
-                            st.error(f"Execution error: {exec_res.get('error')}")
-                        st.rerun()
-
-                    if b3.button("❌ Reject", key=f"rej_{appr_id}"):
-                        update_approval_status(appr_id, "REJECTED", approver_sub=co_session.sub)
-                        from src.db.audit import log_event
-                        log_event(co_session.sub, co_session.actor_role, co_session.tenant_id,
-                                  "reject_action", compute_args_sha256("reject_action", {"approval_id": appr_id}, co_session.sub),
-                                  "BLOCK", f"Rejected by {co_session.sub}")
-                        st.error("❌ Request Rejected.")
-                        st.rerun()
-
+                if b3.button("❌ Reject", key=f"rej_{appr_id}"):
+                    res = call_as(co_token, reject_approved_action, appr_id, "Rejected in approval console")
+                    st.error("❌ Request Rejected." if res.get("decision") == "REJECTED"
+                             else f"Reject error: {res.get('error')}")
+                    st.rerun()
 
 # ─── TAB 3: AUDIT LEDGER & TAMPER LAB ────────────────────────────────────────
 with tab3:
     st.header("🔐 Cryptographic Audit Ledger & Tamper Lab")
     st.markdown(
-        "Every event is chained with SHA-256 (`entry_hash = SHA256(prev_hash || timestamp || session || role || tool || args_sha256 || decision)`). "
-        "This closes AgentGuard's documented limitation by making SQLite audit records mathematically tamper-evident."
+        "Every event is chained with a keyed HMAC-SHA256 "
+        "(`entry_hash = HMAC(key[key_id], canonical_json(event_id, prev_hash, ts, actor, tenant, tool, args_digest, decision, detail))`). "
+        "In-app UPDATE/DELETE is aborted by triggers, and signed checkpoints in an external store detect "
+        "truncation of the newest rows. Tamper-evident, not tamper-proof: it detects changes, it cannot prevent them."
     )
 
     logs = get_audit_log(limit=200)
@@ -468,27 +539,31 @@ with tab3:
 
     with col_v:
         st.subheader("🔍 Cryptographic Chain Verifier")
-        st.caption("Re-walks every link from GENESIS row #1 to the latest event.")
+        st.caption("Streams every row from event 1, then checks the latest signed external checkpoint.")
         if st.button("Verify Full Chain Integrity", type="primary"):
             res = verify_audit_chain()
             if res["ok"]:
-                st.success("✅ **CHAIN INTACT:** 100% of SHA-256 links verified against genesis root.")
+                st.success(f"✅ **CHAIN INTACT:** {res['checked']} HMAC links verified; "
+                           f"checkpoint at event {res.get('checkpoint_event_id')} matches.")
             else:
                 st.error(
-                    f"❌ **TAMPER DETECTED:** Chain broken at `event_id = {res.get('corrupted_event_id')}`!\n\n"
-                    f"**Cryptographic Proof:** {res.get('reason')}"
+                    f"❌ **TAMPER DETECTED:** `{res.get('reason')}` at `event_id = {res.get('corrupted_event_id')}`\n\n"
+                    f"{res.get('message')}"
                 )
 
     with col_t:
         st.subheader("🧪 Live Tamper Lab")
-        st.caption("Simulates an unauthorized SQLite database row modification.")
-        if st.button("💥 Simulate Database Tampering", type="secondary"):
+        st.caption("Simulates an attacker with raw DB-file access: drops the append-only triggers, edits a row.")
+        if not tamper_lab.enabled():
+            st.info("Tamper lab is disabled in production (FINTECH_ENV=production).")
+        elif st.button("💥 Simulate Database Tampering", type="secondary"):
             if logs:
                 target_id = logs[0]["event_id"]
                 curr_dec = logs[0]["decision"]
                 tampered_dec = "ALLOW" if curr_dec != "ALLOW" else "BLOCK"
-                tamper_row(target_id, tampered_dec)
-                st.warning(f"🔧 Direct SQLite update executed: Modified `event_id={target_id}` decision to `{tampered_dec}` without updating SHA-256 hashes.")
+                tamper_lab.tamper_row(target_id, tampered_dec)
+                st.warning(f"🔧 Raw SQLite update executed: `event_id={target_id}` decision set to `{tampered_dec}` "
+                           "without the HMAC key, so its entry_hash cannot be recomputed.")
 
                 check = verify_audit_chain()
                 if not check["ok"]:
@@ -498,10 +573,10 @@ with tab3:
             else:
                 st.warning("Generate events in Tab 1 first.")
 
-        if st.button("🔄 Restore Chain to Valid State"):
+        if tamper_lab.enabled() and st.button("🔄 Restore Chain to Valid State"):
             if logs:
                 target_id = logs[0]["event_id"]
-                restore_row(target_id)
+                tamper_lab.restore_row(target_id)
                 check = verify_audit_chain()
                 if check["ok"]:
                     st.success("✅ Chain restored and verified!")

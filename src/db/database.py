@@ -4,12 +4,15 @@ SQLite schema, seed data, and query helpers.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "fintech_ledger.db"
+DEFAULT_DB_PATH = Path(__file__).parent.parent.parent / "data" / "fintech_ledger.db"
+# Override with FINTECH_DB_PATH (tests always point this at a temp file).
+DB_PATH = Path(os.environ.get("FINTECH_DB_PATH") or DEFAULT_DB_PATH)
 
 # ---------------------------------------------------------------------------
 # Connection factory
@@ -59,7 +62,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     txn_type     TEXT NOT NULL,
     status       TEXT NOT NULL,
     memo         TEXT,
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    refund_of_txn_id TEXT REFERENCES transactions(txn_id)
 );
 
 CREATE TABLE IF NOT EXISTS kyc_records (
@@ -82,20 +86,6 @@ CREATE TABLE IF NOT EXISTS compliance_alerts (
     created_at  TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS pending_approvals (
-    approval_id         TEXT PRIMARY KEY,
-    requester_sub       TEXT NOT NULL,
-    requester_role      TEXT NOT NULL,
-    tenant_id           TEXT,
-    tool_name           TEXT NOT NULL,
-    canonical_args_json TEXT NOT NULL,
-    args_sha256         TEXT NOT NULL,
-    status              TEXT NOT NULL DEFAULT 'PENDING',
-    approver_sub        TEXT,
-    created_at          TEXT NOT NULL,
-    expires_at          TEXT NOT NULL,
-    consumed_at         TEXT
-);
 """
 
 # ---------------------------------------------------------------------------
@@ -343,10 +333,22 @@ _COMPLIANCE_ALERTS = [
 ]
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive, idempotent column migrations for databases created by older versions."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+    if "refund_of_txn_id" not in cols:
+        conn.execute(
+            "ALTER TABLE transactions ADD COLUMN refund_of_txn_id TEXT REFERENCES transactions(txn_id)"
+        )
+
+
 def init_db() -> None:
     """Create schema and seed data idempotently."""
     with get_connection() as conn:
         conn.executescript(_DDL)
+        _migrate(conn)
+        from src.db import approvals as approvals_repo  # local import: avoids an import cycle
+        approvals_repo.init_schema(conn)
 
         # Idempotency guard – skip seed if tenants table already has rows
         row = conn.execute("SELECT COUNT(*) FROM tenants").fetchone()
@@ -400,18 +402,20 @@ def init_db() -> None:
 # Query helpers
 # ---------------------------------------------------------------------------
 
-def get_account(account_id: str, tenant_id: str | None = None) -> dict | None:
+def require_tenant(tenant_id: str) -> str:
+    """Every tenant-owned read/write is scoped (T10): the SQLite stand-in for RLS."""
+    if not isinstance(tenant_id, str) or not tenant_id:
+        raise ValueError("tenant_id is required")
+    return tenant_id
+
+
+def get_account(account_id: str, tenant_id: str) -> dict | None:
+    require_tenant(tenant_id)
     with get_connection() as conn:
-        if tenant_id:
-            row = conn.execute(
-                "SELECT * FROM accounts WHERE account_id=? AND tenant_id=?",
-                (account_id, tenant_id),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT * FROM accounts WHERE account_id=?",
-                (account_id,),
-            ).fetchone()
+        row = conn.execute(
+            "SELECT * FROM accounts WHERE account_id=? AND tenant_id=?",
+            (account_id, tenant_id),
+        ).fetchone()
         return dict(row) if row else None
 
 
@@ -420,13 +424,11 @@ def get_transactions(
     start_date: str | None = None,
     end_date: str | None = None,
     limit: int = 50,
-    tenant_id: str | None = None,
+    *,
+    tenant_id: str,
 ) -> list[dict]:
-    sql = "SELECT * FROM transactions WHERE account_id=?"
-    params: list = [account_id]
-    if tenant_id:
-        sql += " AND tenant_id = ?"
-        params.append(tenant_id)
+    sql = "SELECT * FROM transactions WHERE account_id=? AND tenant_id=?"
+    params: list = [account_id, require_tenant(tenant_id)]
     if start_date:
         sql += " AND created_at >= ?"
         params.append(start_date)
@@ -440,85 +442,41 @@ def get_transactions(
     return [dict(r) for r in rows]
 
 
-def get_pending_approvals(statuses: tuple[str, ...] = ("PENDING", "APPROVED")) -> list[dict]:
-    with get_connection() as conn:
-        placeholders = ",".join("?" for _ in statuses)
-        rows = conn.execute(
-            f"SELECT * FROM pending_approvals WHERE status IN ({placeholders}) ORDER BY created_at DESC",
-            statuses,
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_approval(approval_id: str) -> dict | None:
+def get_transaction(txn_id: str, tenant_id: str) -> dict | None:
+    """Tenant-scoped single transaction lookup. tenant_id is mandatory."""
+    if not tenant_id:
+        raise ValueError("tenant_id is required")
     with get_connection() as conn:
         row = conn.execute(
-            "SELECT * FROM pending_approvals WHERE approval_id=?",
-            (approval_id,),
+            "SELECT * FROM transactions WHERE txn_id=? AND tenant_id=?",
+            (txn_id, tenant_id),
         ).fetchone()
     return dict(row) if row else None
 
 
-def create_approval(
-    approval_id: str,
-    requester_sub: str,
-    requester_role: str,
-    tool_name: str,
-    canonical_args_json: str,
-    args_sha256: str,
-    expires_at: str,
-    tenant_id: str | None = None,
-) -> None:
-    created_at = datetime.now(timezone.utc).isoformat()
+def _refunded_total(conn: sqlite3.Connection, txn_id: str, tenant_id: str) -> int:
+    row = conn.execute(
+        """SELECT COALESCE(SUM(amount_cents), 0) FROM transactions
+           WHERE refund_of_txn_id=? AND tenant_id=? AND txn_type='refund'""",
+        (txn_id, tenant_id),
+    ).fetchone()
+    return int(row[0])
+
+
+def get_refunded_total(txn_id: str, tenant_id: str) -> int:
+    """Sum of refunds already issued against txn_id within tenant_id (minor units)."""
     with get_connection() as conn:
-        conn.execute(
-            """INSERT INTO pending_approvals
-               (approval_id, requester_sub, requester_role, tenant_id, tool_name,
-                canonical_args_json, args_sha256, status, approver_sub,
-                created_at, expires_at, consumed_at)
-               VALUES (?,?,?,?,?,?,?,'PENDING',NULL,?,?,NULL)""",
-            (approval_id, requester_sub, requester_role, tenant_id, tool_name,
-             canonical_args_json, args_sha256, created_at, expires_at),
-        )
+        return _refunded_total(conn, txn_id, tenant_id)
 
 
-def update_approval_status(
-    approval_id: str,
-    status: str,
-    approver_sub: str | None = None,
-    consumed_at: str | None = None,
-) -> None:
-    with get_connection() as conn:
-        conn.execute(
-            """UPDATE pending_approvals
-               SET status=?, approver_sub=?, consumed_at=?
-               WHERE approval_id=?""",
-            (status, approver_sub, consumed_at, approval_id),
-        )
-
-
-def atomic_consume_approval(
-    approval_id: str,
-    approver_sub: str,
-    consumed_at: str,
-) -> bool:
-    """Atomically transition approval from PENDING or APPROVED → CONSUMED.
-
-    Uses BEGIN IMMEDIATE + WHERE status IN ('PENDING', 'APPROVED') to prevent TOCTOU races.
-    Returns True if exactly one row was consumed, False otherwise (already consumed / expired).
-    """
+def _own_txn(fn, *args):
+    """Run fn(conn, *args) in its own BEGIN IMMEDIATE transaction."""
     conn = get_connection()
     try:
         conn.execute("BEGIN IMMEDIATE")
-        cursor = conn.execute(
-            """UPDATE pending_approvals
-               SET status='CONSUMED', approver_sub=?, consumed_at=?
-               WHERE approval_id=? AND status IN ('PENDING', 'APPROVED')""",
-            (approver_sub, consumed_at, approval_id),
-        )
-        consumed = cursor.rowcount == 1
+        result = fn(conn, *args)
         conn.commit()
-        return consumed
+        return result
     except Exception:
         conn.rollback()
         raise
@@ -526,35 +484,69 @@ def atomic_consume_approval(
         conn.close()
 
 
-def freeze_account(account_id: str) -> None:
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE accounts SET is_frozen=1 WHERE account_id=?",
-            (account_id,),
-        )
+def _freeze(conn: sqlite3.Connection, account_id: str, tenant_id: str) -> None:
+    if not tenant_id:
+        raise ValueError("tenant_id is required")
+    cur = conn.execute(
+        "UPDATE accounts SET is_frozen=1 WHERE account_id=? AND tenant_id=?",
+        (account_id, tenant_id),
+    )
+    if cur.rowcount != 1:
+        raise ValueError("Account not found in tenant scope")
 
 
-def refund_transaction(txn_id: str, amount_cents: int) -> str:
+def freeze_account(account_id: str, tenant_id: str, conn: sqlite3.Connection | None = None) -> None:
+    """Freeze an account inside tenant_id. Raises ValueError if no row matched.
+    Pass ``conn`` to join the caller's transaction."""
+    if conn is not None:
+        return _freeze(conn, account_id, tenant_id)
+    return _own_txn(_freeze, account_id, tenant_id)
+
+
+def _refund(conn: sqlite3.Connection, txn_id: str, amount_cents: int, tenant_id: str) -> str:
+    from src.domain.money import Money
+    from src.domain.refunds import check_refund, requested_amount
+
+    if not tenant_id:
+        raise ValueError("tenant_id is required")
+    orig = conn.execute(
+        """SELECT tenant_id, account_id, amount_cents, currency, txn_type
+           FROM transactions WHERE txn_id=? AND tenant_id=?""",
+        (txn_id, tenant_id),
+    ).fetchone()
+    if orig is None:
+        raise ValueError("Transaction not found in tenant scope")
+
+    currency = orig["currency"]
+    requested = check_refund(
+        requested_amount(amount_cents, currency),
+        original=Money.from_minor(orig["amount_cents"], currency),
+        already_refunded=Money.from_minor(_refunded_total(conn, txn_id, tenant_id), currency),
+        original_txn_type=orig["txn_type"],
+    )
     new_txn_id = f"TXN-REF-{uuid.uuid4().hex[:8].upper()}"
-    created_at = datetime.now(timezone.utc).isoformat()
-
-    with get_connection() as conn:
-        orig = conn.execute(
-            "SELECT tenant_id, account_id FROM transactions WHERE txn_id=?",
-            (txn_id,),
-        ).fetchone()
-        if orig is None:
-            raise ValueError(f"Transaction {txn_id} not found")
-
-        conn.execute(
-            """INSERT INTO transactions
-               (txn_id, tenant_id, account_id, merchant_id, amount_cents, currency,
-                txn_type, status, memo, created_at)
-               VALUES (?,?,?,NULL,?,?,'refund','completed',?,?)""",
-            (new_txn_id, orig["tenant_id"], orig["account_id"],
-             amount_cents, "INR", f"Refund for {txn_id}", created_at),
-        )
+    conn.execute(
+        """INSERT INTO transactions
+           (txn_id, tenant_id, account_id, merchant_id, amount_cents, currency,
+            txn_type, status, memo, created_at, refund_of_txn_id)
+           VALUES (?,?,?,NULL,?,?,'refund','completed',?,?,?)""",
+        (new_txn_id, orig["tenant_id"], orig["account_id"], requested.to_minor(), currency,
+         f"Refund for {txn_id}", datetime.now(timezone.utc).isoformat(), txn_id),
+    )
     return new_txn_id
+
+
+def refund_transaction(txn_id: str, amount_cents: int, tenant_id: str,
+                       conn: sqlite3.Connection | None = None) -> str:
+    """Issue a refund against txn_id inside tenant_id (currency inherited).
+
+    The cumulative-refund ceiling check and the insert share one write transaction,
+    so concurrent refunds cannot both pass. Pass ``conn`` to join the caller's
+    transaction (e.g. approval consume + refund + audit in one commit).
+    """
+    if conn is not None:
+        return _refund(conn, txn_id, amount_cents, tenant_id)
+    return _own_txn(_refund, txn_id, amount_cents, tenant_id)
 
 
 def detect_structuring(tenant_id: str, threshold_cents: int = 999900) -> list[dict]:

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "fintech-compliance-mcp": {
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["src/mcp_server/server.py"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "src"
+      }
+    },
+    "shadcn-ui": {
+      "command": "npx",
+      "args": ["-y", "@jpisnice/shadcn-ui-mcp-server"]
+    }
+  }
+}

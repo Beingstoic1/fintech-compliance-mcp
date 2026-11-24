@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-World Fintech Utility & Operational Workflows · Fintech Compliance MCP</title>
+  <meta name="description" content="Operational guide and risk impact analysis for Fintech Compliance MCP. Discover how risk operations, compliance officers, and fintech engineering teams deploy zero-trust AI guardrails.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d14;
+      --bg-subtle: #0f1624;
+      --card-bg: #131d2e;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-subtle: rgba(255, 255, 255, 0.04);
+      --card-hover-border: rgba(56, 189, 248, 0.35);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --accent-blue: #38bdf8;
+      --accent-indigo: #6366f1;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #f43f5e;
+      --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      overflow-x: clip;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      padding-bottom: 96px;
+      overflow-x: clip;
+    }
+
+    a {
+      color: var(--accent-blue);
+      text-decoration: none;
+      transition: color 0.15s var(--ease-out);
+    }
+    a:hover {
+      color: #7dd3fc;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 2px;
+    }
+
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Top Navigation */
+    header.site-header {
+      border-bottom: 1px solid var(--card-border);
+      background: rgba(9, 13, 20, 0.9);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+      color: var(--text-main);
+    }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-blue);
+    }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .nav-link {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+    .nav-link:hover, .nav-link.active {
+      color: var(--text-main);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: #34d399;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-family: var(--font-mono);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: #34d399;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 16px;
+      font-size: 13px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s var(--ease-out);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid #f8fafc;
+    }
+    .btn-primary:hover {
+      background: #e2e8f0;
+      color: #020617;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+    }
+    .btn-secondary:hover {
+      border-color: var(--card-hover-border);
+      background: #172236;
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 72px 0 48px;
+      text-align: left;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-blue);
+      margin-bottom: 16px;
+      padding: 3px 10px;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 4px;
+    }
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      max-width: 920px;
+      margin-bottom: 18px;
+      color: #ffffff;
+    }
+    .hero-desc {
+      font-size: 16px;
+      color: var(--text-muted);
+      max-width: 760px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* Section Headers */
+    .section {
+      margin-top: 80px;
+    }
+    .section-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-blue);
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      margin-bottom: 10px;
+    }
+    .section-desc {
+      font-size: 15px;
+      color: var(--text-muted);
+      max-width: 720px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    /* Story Card / Workflow Comparison */
+    .workflow-card {
+      background: var(--bg-subtle);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+    .workflow-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .workflow-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .workflow-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+    }
+    .workflow-title {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+    .workflow-body {
+      padding: 24px;
+    }
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .side-pane {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .pane-top {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pane-top.unprotected {
+      background: rgba(244, 63, 94, 0.08);
+      color: #fb7185;
+      border-bottom-color: rgba(244, 63, 94, 0.2);
+    }
+    .pane-top.protected {
+      background: rgba(16, 185, 129, 0.08);
+      color: #34d399;
+      border-bottom-color: rgba(16, 185, 129, 0.2);
+    }
+    .pane-content {
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .pane-content pre {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: #090d14;
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: 12px;
+      margin-top: 12px;
+      overflow-x: auto;
+      color: #cbd5e1;
+    }
+
+    /* Calculator Component */
+    .calculator-wrapper {
+      background: var(--bg-subtle);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 36px;
+    }
+    .calc-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .slider-label {
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .slider-val {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--accent-blue);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #1e293b;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+    }
+    .calc-results {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .calc-stat-block {
+      border-bottom: 1px solid var(--card-border-subtle);
+      padding-bottom: 16px;
+      margin-bottom: 16px;
+    }
+    .calc-stat-block:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+      font-family: var(--font-display);
+      font-weight: 600;
+    }
+    .stat-number {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .stat-number.cyan { color: #38bdf8; }
+    .stat-number.emerald { color: #34d399; }
+    .stat-number.amber { color: #fbbf24; }
+    .stat-note {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    /* Role Matrix */
+    .role-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    .role-card {
+      background: var(--bg-subtle);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: border-color 0.15s ease;
+    }
+    .role-card:hover {
+      border-color: var(--card-hover-border);
+    }
+    .role-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .role-title {
+      font-family: var(--font-display);
+      font-size: 17px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+    .role-sub {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-blue);
+    }
+    .role-pill {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .pill-l1 { background: rgba(56, 189, 248, 0.1); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.25); }
+    .pill-l2 { background: rgba(99, 102, 241, 0.1); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.25); }
+    .pill-l3 { background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+    .pill-exec { background: rgba(245, 158, 11, 0.1); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
+
+    .role-item {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .role-item strong {
+      color: #e2e8f0;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    /* FastMCP Specs Box */
+    .spec-box {
+      background: #090d14;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 20px 24px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+
+    /* Footer */
+    footer.site-footer {
+      border-top: 1px solid var(--card-border);
+      margin-top: 100px;
+      padding-top: 48px;
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .footer-left {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .footer-links {
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+    }
+
+    @media (max-width: 860px) {
+      .comparison-grid, .calculator-wrapper, .role-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero-title {
+        font-size: 32px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Sticky Navigation Bar -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="index.html" class="brand">
+        <div class="brand-mark">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <span>Fintech Compliance MCP</span>
+      </a>
+
+      <div class="nav-links">
+        <a href="index.html" class="nav-link">Overview & Architecture</a>
+        <a href="utility.html" class="nav-link active">Workflows & Real-World Utility</a>
+        <a href="SECURITY_AUDIT_REPORT.md" class="nav-link">Security Audit</a>
+        <span class="status-badge"><span class="status-dot"></span> 30/30 Tests Passing</span>
+        <a id="navGithub" href="https://github.com/Beingstoic1/fintech-compliance-mcp" target="_blank" class="btn btn-secondary">GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="hero-eyebrow">Enterprise Risk Operations · Technical Specification</div>
+      <h1 class="hero-title">Why Financial Institutions Cannot Run Autonomous Agents Without Guardrails</h1>
+      <p class="hero-desc">
+        When an AI agent connects directly to core banking or payment APIs, prompt injection, hallucinations, and unverified mutations 
+        turn operational speed into existential regulatory liability. This utility blueprint demonstrates how the Model Context Protocol 
+        creates a deterministic security boundary between probabilistic models and immutable financial ledgers.
+      </p>
+      <div class="hero-actions">
+        <a href="#scenarios" class="btn btn-primary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Review 4 Operational Scenarios
+        </a>
+        <a href="#calculator" class="btn btn-secondary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="16" y1="14" x2="16" y2="18"></line><path d="M16 10h.01"></path><path d="M12 10h.01"></path><path d="M8 10h.01"></path><path d="M12 14h.01"></path><path d="M8 14h.01"></path><path d="M12 18h.01"></path><path d="M8 18h.01"></path></svg>
+          Calculate Risk & Hours Saved
+        </a>
+        <a href="index.html#sandbox" class="btn btn-secondary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          Launch Browser Sandbox
+        </a>
+      </div>
+    </section>
+
+    <!-- Operational Workflows (Before vs. After) -->
+    <section id="scenarios" class="section">
+      <div class="section-header">
+        <div class="section-eyebrow">Production Scenarios</div>
+        <h2 class="section-title">End-to-End Operational Stories</h2>
+        <p class="section-desc">
+          Compare the failure modes of raw agent tool-calling against deterministic MCP guardrails 
+          in real compliance workflows.
+        </p>
+      </div>
+
+      <!-- Scenario 1 -->
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <div class="workflow-title-wrap">
+            <span class="workflow-badge">Scenario 01</span>
+            <h3 class="workflow-title">Structuring & Smurfing AML Alert Triage</h3>
+          </div>
+          <span class="status-badge">RBAC + PII Redaction + Tenant Isolation</span>
+        </div>
+        <div class="workflow-body">
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+            A Junior AML Analyst agent is assigned to triage automated alerts for sub-threshold smurfing patterns 
+            (e.g., repeated transactions just below ₹10,000 threshold to evade mandatory reporting).
+          </p>
+          <div class="comparison-grid">
+            <div class="side-pane">
+              <div class="pane-top unprotected">Unprotected Agent (Direct DB / API)</div>
+              <div class="pane-content">
+                <p>The agent queries the core banking table directly using a raw client query:</p>
+                <pre>SELECT * FROM accounts WHERE tenant_id = 'b2b_cards'</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #fb7185;">
+                  <li>Cross-tenant leakage: Analyst in retail partition reads enterprise partner data.</li>
+                  <li>Cleartext PII: Raw PAN (<code style="color:#fff;">ABCDE1234F</code>) and full account number (<code style="color:#fff;">123456784821</code>) enter LLM prompt context.</li>
+                  <li>Regulatory failure: Violates RBI Master Direction on KYC & SOC 2 data containment.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="side-pane">
+              <div class="pane-top protected">Guardrailed MCP (Zero-Trust)</div>
+              <div class="pane-content">
+                <p>The agent invokes <code style="color: #38bdf8;">detect_structuring_anomalies</code> with its scoped session token:</p>
+                <pre>{
+  "decision": "REDACT",
+  "account_number": "****4821",
+  "tax_id": "XXXXX234F",
+  "tenant_enforced": "tenant_neobank_in"
+}</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #34d399;">
+                  <li>Session-bound tenant isolation blocks cross-tenant query with <code style="color:#fff;">TENANT_ISOLATION_VIOLATION</code>.</li>
+                  <li>PII regex automatically redacts account numbers to last 4 digits and PAN to masked format.</li>
+                  <li>Non-PII numeric values like <code style="color:#fff;">amount_cents</code> remain uncorrupted for fraud calculations.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 2 -->
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <div class="workflow-title-wrap">
+            <span class="workflow-badge">Scenario 02</span>
+            <h3 class="workflow-title">High-Risk Account Freeze (Four-Eyes HITL Control)</h3>
+          </div>
+          <span class="status-badge">Dual-Control + Single-Use TTL Gate</span>
+        </div>
+        <div class="workflow-body">
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+            A Senior AML Investigator determines that an account is orchestrating an active smurfing ring and flags 
+            it for an immediate freeze to halt outward fund transfers.
+          </p>
+          <div class="comparison-grid">
+            <div class="side-pane">
+              <div class="pane-top unprotected">Unprotected Agent (Direct Mutation)</div>
+              <div class="pane-content">
+                <p>The agent immediately calls a mutating endpoint <code style="color:#fff;">freeze_account("ACC-010")</code>:</p>
+                <pre>POST /api/v1/accounts/ACC-010/freeze
+{ "status": "FROZEN", "by": "agent_auto_gpt" }</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #fb7185;">
+                  <li>Autonomous false positive: Legitimate merchant receivables ($500k+) frozen without human confirmation.</li>
+                  <li>Rogue self-approval: Any compromised actor token can unilaterally halt payment operations.</li>
+                  <li>Audit void: No immutable record of who authorized the operational freeze.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="side-pane">
+              <div class="pane-top protected">Guardrailed MCP (Four-Eyes HITL Gate)</div>
+              <div class="pane-content">
+                <p>The agent calls <code style="color: #38bdf8;">request_account_freeze</code>, generating a 15-minute gate:</p>
+                <pre>{
+  "decision": "ESCALATE",
+  "approval_id": "8d3e5f7a-2b4c-4e6a-...",
+  "args_sha256": "4a7b9c1e5f8a2c...",
+  "status": "PENDING",
+  "expires_in_seconds": 900
+}</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #34d399;">
+                  <li>Strict Four-Eyes control: The requesting senior investigator cannot approve their own ticket (<code style="color:#fff;">DUAL_CONTROL_VIOLATION</code>).</li>
+                  <li>A verified Compliance Officer must review the canonical evidence and sign off.</li>
+                  <li>Atomic database consume prevents double-execution or replay.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 3 -->
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <div class="workflow-title-wrap">
+            <span class="workflow-badge">Scenario 03</span>
+            <h3 class="workflow-title">Fee Refund Guardrails & Replay Protection</h3>
+          </div>
+          <span class="status-badge">Argument-Bound Hash Binding + TOCTOU Lock</span>
+        </div>
+        <div class="workflow-body">
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+            A customer support agent detects a disputed ₹500 duplicate transaction fee and requests a balance credit refund.
+          </p>
+          <div class="comparison-grid">
+            <div class="side-pane">
+              <div class="pane-top unprotected">Unprotected Agent (Parameter Drift & Replay)</div>
+              <div class="pane-content">
+                <p>The agent sends repeated refund requests or an adversary intercepts the API call:</p>
+                <pre>POST /api/v1/refunds
+{ "transaction_id": "TXN-N001", "amount": 50000 }</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #fb7185;">
+                  <li>Replay vulnerability: The same API call executed 20 times issues duplicate refunds, draining reserve capital.</li>
+                  <li>Argument tampering: Adversary modifies amount from ₹500 to ₹50,000 between sign-off and execution.</li>
+                  <li>Error leakage: Failed database calls dump raw Python stack traces into agent context.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="side-pane">
+              <div class="pane-top protected">Guardrailed MCP (Cryptographic Binding)</div>
+              <div class="pane-content">
+                <p>Execution strictly verifies <code style="color: #38bdf8;">args_sha256 = SHA256(tool || canonical_json || requester_sub)</code>:</p>
+                <pre>{
+  "decision": "EXECUTED",
+  "action": "execute_approved_action (refund)",
+  "atomic_lock": "CONSUMED",
+  "replays_blocked": true
+}</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #34d399;">
+                  <li>Any alteration to amount or transaction ID invalidates the cryptographic hash binding.</li>
+                  <li>Atomic SQL status transition marks ticket <code style="color:#fff;">CONSUMED</code>, blocking concurrent double-execution.</li>
+                  <li>Safe error sanitization: Bad transactions return <code style="color:#fff;">ACTION_EXECUTION_FAILED</code> with zero stack leakage.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario 4 -->
+      <div class="workflow-card">
+        <div class="workflow-header">
+          <div class="workflow-title-wrap">
+            <span class="workflow-badge">Scenario 04</span>
+            <h3 class="workflow-title">Regulatory Audit & Cryptographic Chain Verification</h3>
+          </div>
+          <span class="status-badge">SHA-256 Hash Chaining + Row Deletion Detection</span>
+        </div>
+        <div class="workflow-body">
+          <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px;">
+            During a periodic SOC 2 Type II or RBI audit, internal regulators must prove that no audit records have been 
+            retroactively modified or wiped by an insider or database administrator.
+          </p>
+          <div class="comparison-grid">
+            <div class="side-pane">
+              <div class="pane-top unprotected">Traditional Database Logs (Vulnerable)</div>
+              <div class="pane-content">
+                <p>Standard SQLite or relational table stores plain audit rows:</p>
+                <pre>UPDATE audit_log SET decision = 'ALLOW' WHERE event_id = 14;</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #fb7185;">
+                  <li>Silent tampering: Rogue admin or SQL injection alters historical entries undetected.</li>
+                  <li>Row deletion: Deleting a non-compliant event leaves no cryptographic proof of removal.</li>
+                  <li>Audit failure: Cannot satisfy non-repudiation requirements under financial compliance mandates.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="side-pane">
+              <div class="pane-top protected">Guardrailed MCP (SHA-256 Chained Ledger)</div>
+              <div class="pane-content">
+                <p>Every audit entry commits to the previous row's cryptographic signature:</p>
+                <pre>entry_hash = SHA256(prev_hash || timestamp || session || role || tool || args_sha256 || decision)</pre>
+                <ul style="margin-top: 12px; padding-left: 18px; color: #34d399;">
+                  <li>Bit-flip sensitivity: Changing a single character in row #14 causes row #15's <code style="color:#fff;">prev_hash</code> check to fail immediately.</li>
+                  <li>Row deletion detection: Removing any row breaks the genesis-to-tip hash continuity.</li>
+                  <li>Automated verifier pinpoints the exact corrupted event ID in &lt; 2 milliseconds.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Impact & ROI Calculator -->
+    <section id="calculator" class="section">
+      <div class="section-header">
+        <div class="section-eyebrow">Interactive Financial Impact Model</div>
+        <h2 class="section-title">Calculate Your Risk Exposure & Operational Savings</h2>
+        <p class="section-desc">
+          Adjust parameters to model how deterministic MCP guardrails reduce financial capital exposure 
+          and compliance review overhead across your agentic workflows.
+        </p>
+      </div>
+
+      <div class="calculator-wrapper">
+        <div class="calc-controls">
+          <div class="slider-group">
+            <div class="slider-header">
+              <span class="slider-label">Monthly Autonomous Actions</span>
+              <span class="slider-val" id="valActions">25,000 actions</span>
+            </div>
+            <input type="range" id="inputActions" min="1000" max="100000" step="1000" value="25000">
+            <span style="font-size: 11px; color: var(--text-dim);">Total automated agent queries, triage decisions, and payment tool calls per month.</span>
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-header">
+              <span class="slider-label">Average Action Value</span>
+              <span class="slider-val" id="valAmount">$ 450</span>
+            </div>
+            <input type="range" id="inputAmount" min="50" max="5000" step="50" value="450">
+            <span style="font-size: 11px; color: var(--text-dim);">Mean capital value involved in refunds, credit limits, or fund freezes.</span>
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-header">
+              <span class="slider-label">High-Risk Mutation Rate (%)</span>
+              <span class="slider-val" id="valMutationRate">4.5 %</span>
+            </div>
+            <input type="range" id="inputMutationRate" min="0.5" max="20" step="0.5" value="4.5">
+            <span style="font-size: 11px; color: var(--text-dim);">Percentage of actions attempting state changes (requiring four-eyes sign-off).</span>
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-header">
+              <span class="slider-label">Analyst Triage Minutes Saved</span>
+              <span class="slider-val" id="valMinutes">8 mins</span>
+            </div>
+            <input type="range" id="inputMinutes" min="2" max="30" step="1" value="8">
+            <span style="font-size: 11px; color: var(--text-dim);">Manual verification time eliminated per alert through pre-masked, pre-checked data.</span>
+          </div>
+        </div>
+
+        <div class="calc-results">
+          <div class="calc-stat-block">
+            <div class="stat-label">Capital Risk Shielded / Month</div>
+            <div class="stat-number emerald" id="resRiskShielded">$ 506,250</div>
+            <div class="stat-note">High-risk financial mutations gated behind cryptographic four-eyes approval tickets.</div>
+          </div>
+
+          <div class="calc-stat-block">
+            <div class="stat-label">Compliance Review Hours Saved</div>
+            <div class="stat-number cyan" id="resHoursSaved">3,333 hrs</div>
+            <div class="stat-note">Equivalent to ~20.8 full-time L1 triage analysts freed for complex investigations.</div>
+          </div>
+
+          <div class="calc-stat-block">
+            <div class="stat-label">Estimated Annual Cost Recovery</div>
+            <div class="stat-number amber" id="resCostRecovery">$ 1,600,000</div>
+            <div class="stat-note">Based on $40/hr compliance operational labor and fraud chargeback avoidance.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Role-by-Role Value Matrix -->
+    <section id="roles" class="section">
+      <div class="section-header">
+        <div class="section-eyebrow">Enterprise Access Matrix</div>
+        <h2 class="section-title">Role-by-Role Operational Value</h2>
+        <p class="section-desc">
+          How different stakeholders in your organization interact with the zero-trust guardrail system.
+        </p>
+      </div>
+
+      <div class="role-grid">
+        <!-- Junior Analyst -->
+        <div class="role-card">
+          <div class="role-header">
+            <div>
+              <h3 class="role-title">Junior AML Analyst</h3>
+              <div class="role-sub">Identity: junior_alice / junior_bob</div>
+            </div>
+            <span class="role-pill pill-l1">L1 Triage</span>
+          </div>
+          <div class="role-item">
+            <strong>Permitted Operations</strong>
+            Read-only account profiling (<code style="color:#38bdf8;">get_account_profile</code>), transaction querying, structuring triage.
+          </div>
+          <div class="role-item">
+            <strong>Automatic Protection</strong>
+            Full PII redaction (PAN masks to <code style="color:#38bdf8;">XXXXX234F</code>, account to <code style="color:#38bdf8;">****4821</code>). Zero ledger write capabilities.
+          </div>
+          <div class="role-item">
+            <strong>Threat Defense</strong>
+            Prompt injection payloads in merchant memos stripped before reaching analyst context window.
+          </div>
+        </div>
+
+        <!-- Senior Investigator -->
+        <div class="role-card">
+          <div class="role-header">
+            <div>
+              <h3 class="role-title">Senior Investigator</h3>
+              <div class="role-sub">Identity: senior_carol / senior_dave</div>
+            </div>
+            <span class="role-pill pill-l2">L2 Forensics</span>
+          </div>
+          <div class="role-item">
+            <strong>Permitted Operations</strong>
+            Unmasked PII access for regulatory filing, anomaly detection across tenant scope, state mutation escalation.
+          </div>
+          <div class="role-item">
+            <strong>Escalation Authority</strong>
+            Can issue <code style="color:#38bdf8;">request_account_freeze</code> and <code style="color:#38bdf8;">request_fee_refund</code> tickets bound to exact SHA-256 arguments.
+          </div>
+          <div class="role-item">
+            <strong>Strict Boundary</strong>
+            Cannot approve own tickets. Prevented from mutating core-banking ledger without dual-control sign-off.
+          </div>
+        </div>
+
+        <!-- Compliance Officer -->
+        <div class="role-card">
+          <div class="role-header">
+            <div>
+              <h3 class="role-title">Compliance Officer</h3>
+              <div class="role-sub">Identity: officer_eve / officer_frank</div>
+            </div>
+            <span class="role-pill pill-l3">L3 Dual-Control</span>
+          </div>
+          <div class="role-item">
+            <strong>Approval Authority</strong>
+            Exclusively permitted to call <code style="color:#38bdf8;">execute_approved_action</code> within their assigned tenant boundary.
+          </div>
+          <div class="role-item">
+            <strong>Anti-Self-Approval Invariant</strong>
+            Blocked from approving any request where <code style="color:#38bdf8;">requester_sub == session.sub</code> (<code style="color:#f43f5e;">DUAL_CONTROL_VIOLATION</code>).
+          </div>
+          <div class="role-item">
+            <strong>Atomic Single-Use Gate</strong>
+            Tickets expire after 15 minutes and transition immediately to <code style="color:#38bdf8;">CONSUMED</code>, eliminating TOCTOU race windows.
+          </div>
+        </div>
+
+        <!-- CTO / Head of Risk -->
+        <div class="role-card">
+          <div class="role-header">
+            <div>
+              <h3 class="role-title">Fintech CTO & VP of Risk</h3>
+              <div class="role-sub">Executive & Audit Assurance</div>
+            </div>
+            <span class="role-pill pill-exec">Executive Oversight</span>
+          </div>
+          <div class="role-item">
+            <strong>Institutional Non-Repudiation</strong>
+            Every agent action chained from genesis row #1 via SHA-256. Cryptographic mathematical proof for SOC 2 Type II audits.
+          </div>
+          <div class="role-item">
+            <strong>Zero-Trust Session Resolution</strong>
+            Roles resolved strictly via server-side session tokens. Client-supplied headers or prompt overrides have 0 authority.
+          </div>
+          <div class="role-item">
+            <strong>FastMCP Standardization</strong>
+            Open standard tool interface compatible with Claude Desktop, Cursor, Antigravity, and proprietary internal agent loops.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Operational Runbook / Tool Signature -->
+    <section class="section">
+      <div class="section-header">
+        <div class="section-eyebrow">Integration Architecture</div>
+        <h2 class="section-title">FastMCP Server Specification</h2>
+        <p class="section-desc">
+          Drop this MCP server directly into your Antigravity or Claude Desktop configuration.
+        </p>
+      </div>
+
+      <div class="spec-box">
+<pre>// .agents/mcp_config.json
+{
+  "mcpServers": {
+    "fintech-compliance-mcp": {
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["src/mcp_server/server.py"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "src"
+      }
+    }
+  }
+}</pre>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-left">
+          <span>&copy; 2026 Fintech Compliance MCP. Open-source zero-trust agentic security.</span>
+        </div>
+        <div class="footer-links">
+          <a href="index.html">Overview & Architecture</a>
+          <a href="SECURITY_AUDIT_REPORT.md">Security Audit Report</a>
+          <a id="footerGithub" href="https://github.com/Beingstoic1/fintech-compliance-mcp" target="_blank">GitHub</a>
+          <a id="footerLinkedIn" href="https://www.linkedin.com/in/shubham112/" target="_blank">LinkedIn</a>
+          <a id="footerEmail" href="mailto:shubham987g@gmail.com">Contact</a>
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    // Config Links
+    const SITE_CONFIG = {
+      github: "https://github.com/Beingstoic1/fintech-compliance-mcp",
+      linkedin: "https://www.linkedin.com/in/shubham112/",
+      email: "mailto:shubham987g@gmail.com"
+    };
+
+    document.getElementById("navGithub").href = SITE_CONFIG.github;
+    document.getElementById("footerGithub").href = SITE_CONFIG.github;
+    document.getElementById("footerLinkedIn").href = SITE_CONFIG.linkedin;
+    document.getElementById("footerEmail").href = SITE_CONFIG.email;
+
+    // Interactive Calculator Logic
+    const inputActions = document.getElementById("inputActions");
+    const inputAmount = document.getElementById("inputAmount");
+    const inputMutationRate = document.getElementById("inputMutationRate");
+    const inputMinutes = document.getElementById("inputMinutes");
+
+    const valActions = document.getElementById("valActions");
+    const valAmount = document.getElementById("valAmount");
+    const valMutationRate = document.getElementById("valMutationRate");
+    const valMinutes = document.getElementById("valMinutes");
+
+    const resRiskShielded = document.getElementById("resRiskShielded");
+    const resHoursSaved = document.getElementById("resHoursSaved");
+    const resCostRecovery = document.getElementById("resCostRecovery");
+
+    function updateCalculator() {
+      const actions = parseInt(inputActions.value, 10);
+      const amount = parseInt(inputAmount.value, 10);
+      const mutationRate = parseFloat(inputMutationRate.value);
+      const minutes = parseInt(inputMinutes.value, 10);
+
+      valActions.textContent = actions.toLocaleString() + " actions";
+      valAmount.textContent = "$ " + amount.toLocaleString();
+      valMutationRate.textContent = mutationRate.toFixed(1) + " %";
+      valMinutes.textContent = minutes + " mins";
+
+      // Calculations
+      const highRiskActions = actions * (mutationRate / 100);
+      const riskShielded = Math.round(highRiskActions * amount);
+      const hoursSaved = Math.round((actions * minutes) / 60);
+      const costRecovery = Math.round((hoursSaved * 40) + (riskShielded * 0.05)); // $40/hr + 5% fraud loss reduction
+
+      resRiskShielded.textContent = "$ " + riskShielded.toLocaleString();
+      resHoursSaved.textContent = hoursSaved.toLocaleString() + " hrs";
+      resCostRecovery.textContent = "$ " + costRecovery.toLocaleString();
+    }
+
+    inputActions.addEventListener("input", updateCalculator);
+    inputAmount.addEventListener("input", updateCalculator);
+    inputMutationRate.addEventListener("input", updateCalculator);
+    inputMinutes.addEventListener("input", updateCalculator);
+
+    updateCalculator();
+  </script>
+</body>
+</html>

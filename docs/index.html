@@ -669,6 +669,7 @@
       </div>
       <div class="nav-links">
         <a href="#pipeline" class="nav-link">Architecture</a>
+        <a href="utility.html" class="nav-link" style="color: var(--accent-blue); font-weight: 600;">How It Works & Utility</a>
         <a href="#sandbox" class="nav-link">Interactive Sandbox</a>
         <a href="#benchmarks" class="nav-link">Benchmarks</a>
         <span class="status-badge"><span class="status-dot"></span> 30/30 pytest passing</span>
@@ -691,7 +692,11 @@
         <span>🔒 <strong>Red-Team Security Audit Signed Off</strong>: Hardened against TOCTOU race conditions via atomic approval locking, audit row-deletion detection, and Unicode homoglyph/ZWSP prompt injection bypasses (<a href="SECURITY_AUDIT_REPORT.md" style="color: #38bdf8; text-decoration: underline;">SECURITY_AUDIT_REPORT.md</a>).</span>
       </div>
       <div class="hero-actions">
-        <a id="heroWorkbenchBtn" href="#" target="_blank" class="btn btn-primary">
+        <a href="utility.html" class="btn btn-primary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          How It Works & Real-World Utility
+        </a>
+        <a id="heroWorkbenchBtn" href="#" target="_blank" class="btn btn-secondary">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           Launch Live Workbench
         </a>
@@ -722,6 +727,46 @@
           <div class="metric-val purple">15 Min</div>
           <div class="metric-label">Four-Eyes Dual Control</div>
           <div class="metric-sub">Argument-bound single-use TTL approval; rogue self-approval blocked</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Real-World Fintech Utility & Operational Stories Highlight -->
+    <section class="section" style="margin-top: 60px;">
+      <div style="background: var(--bg-subtle); border: 1px solid var(--card-border); border-radius: var(--radius-lg); padding: 32px; border-left: 4px solid var(--accent-blue);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 20px;">
+          <div>
+            <div class="section-eyebrow">Production Operational Workflows</div>
+            <h2 style="font-size: 24px; font-weight: 700; color: #ffffff; margin-bottom: 6px;">How Risk & Engineering Teams Use This in Production</h2>
+            <p style="color: var(--text-muted); font-size: 14px; max-width: 680px;">
+              Explore four detailed before-and-after operational runbooks, an interactive risk impact calculator, and role-by-role access matrices on our dedicated utility showcase page.
+            </p>
+          </div>
+          <a href="utility.html" class="btn btn-primary" style="white-space: nowrap;">
+            <span>Explore 4 Workflows & Impact Calculator</span> &rarr;
+          </a>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 16px;">
+          <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-blue); margin-bottom: 4px;">WORKFLOW 01</div>
+            <div style="font-weight: 600; color: #fff; font-size: 14px; margin-bottom: 4px;">AML Smurfing Triage</div>
+            <div style="color: var(--text-muted); font-size: 12px;">Junior analyst PII auto-masking + cross-tenant data isolation.</div>
+          </div>
+          <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-blue); margin-bottom: 4px;">WORKFLOW 02</div>
+            <div style="font-weight: 600; color: #fff; font-size: 14px; margin-bottom: 4px;">Four-Eyes Account Freeze</div>
+            <div style="color: var(--text-muted); font-size: 12px;">15-min cryptographic approval tickets; self-approval prohibited.</div>
+          </div>
+          <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-blue); margin-bottom: 4px;">WORKFLOW 03</div>
+            <div style="font-weight: 600; color: #fff; font-size: 14px; margin-bottom: 4px;">Fee Refund Guardrails</div>
+            <div style="color: var(--text-muted); font-size: 12px;">Exact argument hash binding + atomic SQL TOCTOU locking.</div>
+          </div>
+          <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-blue); margin-bottom: 4px;">WORKFLOW 04</div>
+            <div style="font-weight: 600; color: #fff; font-size: 14px; margin-bottom: 4px;">Tamper-Proof Audit</div>
+            <div style="color: var(--text-muted); font-size: 12px;">SHA-256 genesis-to-tip hash chain with automated corrupt row locator.</div>
+          </div>
         </div>
       </div>
     </section>
@@ -1009,6 +1054,7 @@
         Fintech Compliance MCP · Designed & Engineered by <strong id="footerAuthor" style="color: var(--text-main);">Shubham Gupta</strong> · Licensed under Apache-2.0
       </div>
       <div style="display: flex; gap: 18px; align-items: center; flex-wrap: wrap;">
+        <a href="utility.html" style="color: var(--accent-blue); font-weight: 500;">Workflows & Utility</a>
         <a id="footerGithub" href="#" target="_blank" rel="noopener noreferrer">GitHub</a>
         <a id="footerWorkbench" href="#" target="_blank" rel="noopener noreferrer">Live Workbench</a>
         <a id="footerLinkedin" href="#" target="_blank" rel="noopener noreferrer">LinkedIn</a>

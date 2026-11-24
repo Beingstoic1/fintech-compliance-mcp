@@ -3,8 +3,14 @@ _reference_repos/
 __pycache__/
 *.pyc
 data/*.db
+data/*.db-wal
+data/*.db-shm
+data/.binding_keys
+data/.audit_keys
+data/audit_checkpoints.jsonl
 .DS_Store
 */.DS_Store
 .pytest_cache/
 .agents/skills/
 
+.memory/

@@ -8,7 +8,8 @@ version = "1.0.0"
 description = "Zero-trust fintech compliance MCP server with hash-chained audit ledger"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.0",
+    "mcp>=2.3,<3",
+    "pyjwt>=2.10",
     "pydantic>=2.0",
     "streamlit>=1.35",
     "pandas>=2.0",
@@ -18,6 +19,9 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+]
+postgres = [
+    "psycopg[binary]>=3.2",
 ]
 
 [tool.hatch.build.targets.wheel]
